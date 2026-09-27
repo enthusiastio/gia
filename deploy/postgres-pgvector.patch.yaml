@@ -1,0 +1,24 @@
+# Patch for the solutialab-assistant-db Deployment.
+#
+#   kubectl -n solutialab-assistant patch deployment solutialab-assistant-db \
+#     --patch-file deploy/postgres-pgvector.patch.yaml
+#
+# Two things matter here:
+#
+# 1. The image gains the pgvector extension. It stays on PostgreSQL 16, so the
+#    existing PGDATA on db-pvc is read as-is — this is an image swap, not an
+#    upgrade, and nothing is reinitialised.
+#
+# 2. strategy: Recreate. db-pvc is ReadWriteOnce, and the default RollingUpdate
+#    starts the replacement pod before terminating the old one. The new pod
+#    would then block indefinitely on a multi-attach error, because the old pod
+#    still holds the volume. Recreate tears the old pod down first.
+spec:
+  strategy:
+    type: Recreate
+    rollingUpdate: null
+  template:
+    spec:
+      containers:
+        - name: solutialab-assistant-db
+          image: pgvector/pgvector:pg16

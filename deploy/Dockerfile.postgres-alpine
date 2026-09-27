@@ -1,0 +1,22 @@
+# Alternative to the official pgvector image: the same Alpine base you run now,
+# with pgvector compiled in.
+#
+# Use this if you would rather not move the existing PGDATA from musl to glibc.
+# The official pgvector images are Debian-based, and changing libc changes text
+# collation behaviour, which is why the swap calls for a REINDEX. Staying on
+# Alpine sidesteps that question entirely, at the cost of maintaining an image.
+#
+#   docker build -f deploy/Dockerfile.postgres-alpine \
+#     -t ghcr.io/<owner>/solutialab-assistant-postgres:16.2-pgvector .
+#   docker push ghcr.io/<owner>/solutialab-assistant-postgres:16.2-pgvector
+FROM postgres:16.2-alpine
+
+ARG PGVECTOR_VERSION=v0.8.0
+
+RUN apk add --no-cache --virtual .build-deps build-base clang19 llvm19-dev llvm19 git \
+ && git clone --branch "$PGVECTOR_VERSION" --depth 1 https://github.com/pgvector/pgvector.git /tmp/pgvector \
+ && cd /tmp/pgvector \
+ && make OPTFLAGS="" \
+ && make install \
+ && rm -rf /tmp/pgvector \
+ && apk del .build-deps
