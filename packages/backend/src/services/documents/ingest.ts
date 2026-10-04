@@ -3,6 +3,7 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import knex from '../../db/knex';
 import { getAIProvider } from '../ai';
+import { resolveUserAIConfig } from '../settings';
 import { createLogger, logger } from '../../logger';
 import { chunkMarkdown, embeddableText } from './chunker';
 import { embedTexts, toVectorLiteral } from './embeddings';
@@ -50,9 +51,8 @@ function titleFromFilename(originalName: string): string {
  * which is what the agent reads to decide where to look.
  */
 async function describe(userId: string, originalName: string, text: string): Promise<Described> {
-  const [config] = await knex('user_configs').where({ user_id: userId });
-  const model = config?.model || process.env.DEFAULT_MODEL || 'claude-opus-4-8';
-  const chat = getAIProvider(config?.model_provider ?? null);
+  const { model, provider } = await resolveUserAIConfig(userId);
+  const chat = getAIProvider(provider);
 
   const reply = await chat({
     model,

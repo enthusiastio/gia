@@ -15,6 +15,7 @@ import {
   updateUserDocument,
 } from '../services/documents/store';
 import { deleteUserAccount } from '../services/users';
+import { getGeneralSettings, saveGeneralSettings, SERVER_DEFAULT_MODEL } from '../services/settings';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -30,6 +31,17 @@ const upload = multer({
   storage: documentStorage,
   fileFilter: documentFileFilter,
   limits: { fileSize: maxSizeMB * 1024 * 1024 },
+});
+
+/** General: the defaults for every user without their own model or prompt. */
+router.get('/settings', async (_req: Request, res: Response) => {
+  res.json({ ...(await getGeneralSettings()), server_default_model: SERVER_DEFAULT_MODEL });
+});
+
+router.put('/settings', async (req: Request, res: Response) => {
+  const { default_model, default_model_provider, default_system_prompt } = req.body;
+  const saved = await saveGeneralSettings({ default_model, default_model_provider, default_system_prompt });
+  res.json({ ...saved, server_default_model: SERVER_DEFAULT_MODEL });
 });
 
 /** Replaces google_id, which the admin UI has no use for, with whether it is set. */

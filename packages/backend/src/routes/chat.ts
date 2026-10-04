@@ -9,6 +9,7 @@ const pdfParse: (
 import { requireAuth } from "../middleware/auth";
 import knex, { insertRow } from "../db/knex";
 import { getAIProvider } from "../services/ai";
+import { resolveUserAIConfig } from "../services/settings";
 import { ChatMessage } from "../services/ai/types";
 import { createLogger } from "../logger";
 import { v4 as uuidv4 } from "uuid";
@@ -184,14 +185,11 @@ router.post(
       .orderBy("created_at", "asc")
       .select("role", "content", "image_path");
 
-    const [userConfig] = await knex("user_configs").where({
-      user_id: req.user!.id,
-    });
-    const model =
-      userConfig?.model || process.env.DEFAULT_MODEL || "claude-opus-4-8";
-    const modelProvider = userConfig?.model_provider ?? null;
-    const basePrompt =
-      userConfig?.system_prompt?.trim() || "You are a helpful assistant.";
+    const {
+      model,
+      provider: modelProvider,
+      systemPrompt: basePrompt,
+    } = await resolveUserAIConfig(req.user!.id);
 
     // Documents: a manifest of the user's files plus the ones marked "always
     // include", with tools the model uses to search and read the rest. All of

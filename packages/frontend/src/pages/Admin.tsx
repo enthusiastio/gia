@@ -1,14 +1,10 @@
 import { useState, useEffect } from 'react';
-
-const MODEL_PROVIDERS: Record<string, string> = {
-  'claude-fable-5': 'claude', 'claude-opus-4-8': 'claude', 'claude-sonnet-4-6': 'claude', 'claude-haiku-4-5': 'claude',
-  'gpt-5.5': 'openai', 'gpt-5.4': 'openai', 'gpt-5.4-mini': 'openai', 'gpt-4o': 'openai',
-  'gemini-3.5-flash': 'gemini', 'gemini-2.5-pro': 'gemini', 'gemini-2.5-flash': 'gemini',
-};
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, Plus, Save, Trash2, Users } from 'lucide-react';
-import { api, AdminUser } from '@/lib/api';
+import { ArrowLeft, Plus, Save, SlidersHorizontal, Trash2, Users } from 'lucide-react';
+import { api, AdminUser, GeneralSettings } from '@/lib/api';
 import { DocumentPanel } from '@/components/admin/DocumentPanel';
+import { GeneralPanel } from '@/components/admin/GeneralPanel';
+import { ModelSelect } from '@/components/admin/ModelSelect';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -16,6 +12,8 @@ export default function Admin() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [selected, setSelected] = useState<AdminUser | null>(null);
+  const [view, setView] = useState<'general' | 'user' | null>(null);
+  const [settings, setSettings] = useState<GeneralSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [model, setModel] = useState('');
   const [modelProvider, setModelProvider] = useState('');
@@ -31,11 +29,18 @@ export default function Admin() {
 
   useEffect(() => {
     api.admin.users().then(setUsers).catch(console.error);
+    api.admin.settings().then(setSettings).catch(console.error);
   }, []);
+
+  const openGeneral = () => {
+    setView('general');
+    setSelected(null);
+  };
 
   const selectUser = async (u: AdminUser) => {
     const detail = await api.admin.user(u.id);
     setSelected(detail);
+    setView('user');
     setModel(detail.model ?? '');
     setModelProvider(detail.model_provider ?? '');
     setSystemPrompt(detail.system_prompt ?? '');
@@ -50,6 +55,7 @@ export default function Admin() {
     try {
       await api.admin.deleteUser(selected.id);
       setSelected(null);
+      setView(null);
       setConfirmingDelete(false);
       setUsers(await api.admin.users());
     } catch (err) {
@@ -101,6 +107,21 @@ export default function Admin() {
       <div className="max-w-5xl mx-auto p-4 md:p-6 grid md:grid-cols-[280px_1fr] gap-4">
         {/* User list, with the add control where the new user will appear */}
         <div className="space-y-2 self-start">
+          <button
+            onClick={openGeneral}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+              view === 'general' ? 'bg-primary/10 border-primary/40' : 'bg-surface border-border hover:bg-surface-2'
+            }`}
+          >
+            <SlidersHorizontal size={15} className="text-text-muted flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-text-primary">General</p>
+              <p className="text-xs text-text-dim truncate">
+                Default model and prompt
+              </p>
+            </div>
+          </button>
+
           <div className="bg-surface border border-border rounded-2xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
               <Users size={15} className="text-text-muted" />
@@ -197,8 +218,10 @@ export default function Admin() {
           </AnimatePresence>
         </div>
 
-        {/* User detail */}
-        {selected ? (
+        {/* General settings or user detail */}
+        {view === 'general' && settings ? (
+          <GeneralPanel settings={settings} onSaved={setSettings} />
+        ) : selected ? (
           <motion.div
             key={selected.id}
             initial={{ opacity: 0, x: 12 }}
@@ -221,30 +244,11 @@ export default function Admin() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs text-text-muted mb-1.5">AI Model</label>
-                  <select
+                  <ModelSelect
                     value={model}
-                    onChange={(e) => { setModel(e.target.value); setModelProvider(MODEL_PROVIDERS[e.target.value] ?? ''); }}
-                    className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary outline-none focus:border-primary/50 transition-colors font-mono"
-                  >
-                    <option value="">Default (system default)</option>
-                    <optgroup label="Anthropic — Claude">
-                      <option value="claude-fable-5">claude-fable-5 — Most capable (flagship)</option>
-                      <option value="claude-opus-4-8">claude-opus-4-8 — Complex reasoning &amp; agentic</option>
-                      <option value="claude-sonnet-4-6">claude-sonnet-4-6 — Speed + intelligence balance</option>
-                      <option value="claude-haiku-4-5">claude-haiku-4-5 — Fastest, near-frontier</option>
-                    </optgroup>
-                    <optgroup label="OpenAI — GPT">
-                      <option value="gpt-5.5">gpt-5.5 — Latest flagship</option>
-                      <option value="gpt-5.4">gpt-5.4 — Coding &amp; professional</option>
-                      <option value="gpt-5.4-mini">gpt-5.4-mini — Strongest mini model</option>
-                      <option value="gpt-4o">gpt-4o — Widely available</option>
-                    </optgroup>
-                    <optgroup label="Google — Gemini">
-                      <option value="gemini-3.5-flash">gemini-3.5-flash — Most intelligent</option>
-                      <option value="gemini-2.5-pro">gemini-2.5-pro — Advanced complex tasks</option>
-                      <option value="gemini-2.5-flash">gemini-2.5-flash — Best price-performance</option>
-                    </optgroup>
-                  </select>
+                    onChange={(m, p) => { setModel(m); setModelProvider(p); }}
+                    defaultLabel={`Default (${settings?.default_model ?? settings?.server_default_model ?? 'General'})`}
+                  />
                 </div>
 
                 <div>
@@ -252,7 +256,9 @@ export default function Admin() {
                   <textarea
                     value={systemPrompt}
                     onChange={(e) => setSystemPrompt(e.target.value)}
-                    placeholder="You are a personalized genetic health assistant..."
+                    placeholder={settings?.default_system_prompt
+                      ? 'Empty: uses the default prompt from General'
+                      : 'You are a personalized genetic health assistant...'}
                     rows={5}
                     className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-dim outline-none focus:border-primary/50 transition-colors resize-none leading-relaxed"
                   />
@@ -302,7 +308,7 @@ export default function Admin() {
           </motion.div>
         ) : (
           <div className="flex items-center justify-center text-text-dim text-sm bg-surface border border-border rounded-2xl">
-            Select a user to manage their configuration
+            Choose General to set the defaults, or a user to manage their own settings
           </div>
         )}
       </div>

@@ -91,6 +91,14 @@ export interface DocumentPatch {
   always_include?: boolean;
 }
 
+export interface GeneralSettings {
+  default_model: string | null;
+  default_model_provider: string | null;
+  default_system_prompt: string | null;
+  /** DEFAULT_MODEL from the server's .env, used when no default model is set here. */
+  server_default_model: string;
+}
+
 export interface AdminUser extends User {
   model: string | null;
   model_provider: string | null;
@@ -135,6 +143,13 @@ export const api = {
 
   admin: {
     users: () => request<AdminUser[]>(`${BASE}/admin/users`),
+    settings: () => request<GeneralSettings>(`${BASE}/admin/settings`),
+    saveSettings: (settings: Omit<GeneralSettings, 'server_default_model'>) =>
+      request<GeneralSettings>(`${BASE}/admin/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      }),
     createUser: (email: string, name?: string) =>
       request<AdminUser>(`${BASE}/admin/users`, {
         method: 'POST',
