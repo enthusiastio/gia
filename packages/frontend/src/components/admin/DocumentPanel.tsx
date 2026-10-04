@@ -230,6 +230,7 @@ export function DocumentPanel({ userId }: { userId: string }) {
   const [files, setFiles] = useState<UserFile[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   const refresh = async () => {
     const detail = await api.admin.user(userId);
@@ -268,10 +269,8 @@ export function DocumentPanel({ userId }: { userId: string }) {
 
   // One at a time, so a rejected file names itself and the ones before it
   // are already stored.
-  const handlePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const picked = Array.from(e.target.files ?? []);
-    if (inputRef.current) inputRef.current.value = '';
-    if (picked.length === 0) return;
+  const uploadFiles = (picked: File[]) => {
+    if (picked.length === 0 || busy) return;
     guard(async () => {
       for (const file of picked) {
         try {
@@ -281,6 +280,30 @@ export function DocumentPanel({ userId }: { userId: string }) {
         }
       }
     });
+  };
+
+  const handlePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    if (inputRef.current) inputRef.current.value = '';
+    uploadFiles(picked);
+  };
+
+  const dropHandlers = {
+    onDragOver: (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes('Files')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      setDragging(true);
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      // Moving over a child element also fires dragleave on the parent.
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragging(false);
+      uploadFiles(Array.from(e.dataTransfer.files));
+    },
   };
 
   const handleDelete = (fileId: string) =>
@@ -328,15 +351,20 @@ export function DocumentPanel({ userId }: { userId: string }) {
       )}
 
       {files.length === 0 ? (
-        <button
-          onClick={() => inputRef.current?.click()}
-          disabled={busy}
-          className="w-full rounded-xl border border-dashed border-border/70 px-4 py-8 text-center hover:bg-surface-2 transition-colors disabled:opacity-40"
-        >
-          <Upload size={16} className="mx-auto text-text-dim mb-2" />
-          <p className="text-sm text-text-muted">No documents yet</p>
-          <p className="text-xs text-text-dim mt-0.5">Click to upload one or more files</p>
-        </button>
+        <div {...dropHandlers}>
+          <button
+            onClick={() => inputRef.current?.click()}
+            disabled={busy}
+            className={cn(
+              'w-full rounded-xl border border-dashed px-4 py-8 text-center transition-colors disabled:opacity-40',
+              dragging ? 'border-primary bg-primary/10' : 'border-border/70 hover:bg-surface-2'
+            )}
+          >
+            <Upload size={16} className={cn('mx-auto mb-2', dragging ? 'text-primary' : 'text-text-dim')} />
+            <p className="text-sm text-text-muted">{dragging ? 'Drop to upload' : 'No documents yet'}</p>
+            <p className="text-xs text-text-dim mt-0.5">Drop files here or click to upload</p>
+          </button>
+        </div>
       ) : (
         <div className="space-y-2">
           {files.map((file) => (

@@ -22,6 +22,27 @@ const router = Router();
 router.use(requireAuth);
 
 const uploadDir = process.env.UPLOAD_DIR ?? "./uploads";
+
+/**
+ * Default answer style for every user. It sits just before the operator's
+ * per-user prompt, so a user whose prompt asks for something else still gets
+ * that. Without it, models answer health questions with pages of material
+ * and leave the user to dig out what they actually wanted.
+ */
+const RESPONSE_STYLE = `
+How to answer:
+- Be brief. Lead with the direct answer in a few sentences or a short list, and
+  stop once the question is answered.
+- Give a comprehensive list or a long explanation only when the user asks for
+  it, or when the question cannot be answered correctly without it.
+- If a question is broad or ambiguous (e.g. "what do my results mean?" or
+  "what should I do?"), do not cover every possibility. Ask one or two short
+  clarifying questions instead, offering the two to four most likely directions
+  to choose from.
+- No restating the question, no closing summary, and medical caveats in one
+  short sentence at most. You may end by offering to go deeper on one specific
+  point.
+`.trim();
 const maxSizeMB = parseInt(process.env.MAX_FILE_SIZE_MB ?? "50", 10);
 
 const imageStorage = multer.diskStorage({
@@ -170,12 +191,12 @@ router.post(
       userConfig?.model || process.env.DEFAULT_MODEL || "claude-opus-4-8";
     const modelProvider = userConfig?.model_provider ?? null;
     const basePrompt =
-      userConfig?.system_prompt ?? "You are a helpful assistant.";
+      userConfig?.system_prompt?.trim() || "You are a helpful assistant.";
 
     // Documents: a manifest of the user's files plus the ones marked "always
     // include", with tools the model uses to search and read the rest. All of
     // it is scoped to this user's own files.
-    let systemPrompt = basePrompt;
+    let systemPrompt = [RESPONSE_STYLE, basePrompt].join("\n\n");
     let pinnedSources: Source[] = [];
     let documentTools: DocumentTools | null = null;
     try {
@@ -183,13 +204,14 @@ router.post(
       if (documents.hasDocuments) {
         pinnedSources = documents.sources;
         documentTools = createDocumentTools(req.user!.id);
-        // The operator's prompt goes last, closest to the question. Placed first
-        // it sits behind ~15KB of records and loses to them on style; placed
-        // here it governs how the grounded answer is actually written.
+        // Style rules and the operator's prompt go last, closest to the
+        // question. Placed first they sit behind ~15KB of records and lose to
+        // them on style; placed here they govern how the answer is written.
         systemPrompt = [
           "--- USER HEALTH DOCUMENTS ---",
           documents.prompt,
           "--- END OF USER HEALTH DOCUMENTS ---",
+          RESPONSE_STYLE,
           basePrompt,
         ].join("\n\n");
       }
