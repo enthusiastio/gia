@@ -74,6 +74,20 @@ async function main() {
 
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
+  // In production this one app also serves the built frontend, so pages and
+  // /api share an origin (no CORS, same cookie). In development Vite serves
+  // the pages and proxies /api here instead.
+  if (process.env.NODE_ENV === "production") {
+    const frontendDist = path.resolve(__dirname, "../../frontend/dist");
+    app.use(express.static(frontendDist));
+    // Client-side routes (/chat, /admin, ...) all load the app shell; unknown
+    // /api paths still get a 404 rather than HTML.
+    app.get(/^(?!\/api\/).*/, (_req, res) =>
+      res.sendFile(path.join(frontendDist, "index.html")),
+    );
+    process.stdout.write(`[BOOT] serving frontend from ${frontendDist}\n`);
+  }
+
   app.listen(PORT, () =>
     process.stdout.write(`[BOOT] Backend running on http://localhost:${PORT}\n`),
   );
