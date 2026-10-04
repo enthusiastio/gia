@@ -91,13 +91,33 @@ export interface DocumentPatch {
   always_include?: boolean;
 }
 
+export type ProviderId = 'openai' | 'claude' | 'gemini';
+
+export interface ApiKeyStatus {
+  /** saved: entered under General; env: from the server's .env; none: no key. */
+  source: 'saved' | 'env' | 'none';
+  last4: string | null;
+}
+
+export interface ModelOption {
+  id: string;
+  provider: ProviderId;
+  label: string;
+  /** Offered in the model dropdowns. */
+  enabled: boolean;
+}
+
 export interface GeneralSettings {
   default_model: string | null;
   default_model_provider: string | null;
   default_system_prompt: string | null;
   /** DEFAULT_MODEL from the server's .env, used when no default model is set here. */
   server_default_model: string;
+  api_keys: Record<ProviderId, ApiKeyStatus>;
+  models: ModelOption[];
 }
+
+export type GeneralDefaults = Pick<GeneralSettings, 'default_model' | 'default_model_provider' | 'default_system_prompt'>;
 
 export interface AdminUser extends User {
   model: string | null;
@@ -144,11 +164,25 @@ export const api = {
   admin: {
     users: () => request<AdminUser[]>(`${BASE}/admin/users`),
     settings: () => request<GeneralSettings>(`${BASE}/admin/settings`),
-    saveSettings: (settings: Omit<GeneralSettings, 'server_default_model'>) =>
+    saveSettings: (settings: GeneralDefaults) =>
       request<GeneralSettings>(`${BASE}/admin/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
+      }),
+    saveApiKey: (provider: ProviderId, apiKey: string) =>
+      request<GeneralSettings>(`${BASE}/admin/settings/api-keys/${provider}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: apiKey }),
+      }),
+    removeApiKey: (provider: ProviderId) =>
+      request<GeneralSettings>(`${BASE}/admin/settings/api-keys/${provider}`, { method: 'DELETE' }),
+    saveEnabledModels: (enabled: string[]) =>
+      request<GeneralSettings>(`${BASE}/admin/settings/models`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
       }),
     createUser: (email: string, name?: string) =>
       request<AdminUser>(`${BASE}/admin/users`, {

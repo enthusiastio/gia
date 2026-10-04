@@ -15,7 +15,17 @@ import {
   updateUserDocument,
 } from '../services/documents/store';
 import { deleteUserAccount } from '../services/users';
-import { getGeneralSettings, saveGeneralSettings, SERVER_DEFAULT_MODEL } from '../services/settings';
+import {
+  getApiKeyStatus,
+  getEnabledModels,
+  getGeneralSettings,
+  removeApiKey,
+  saveApiKey,
+  saveGeneralSettings,
+  SERVER_DEFAULT_MODEL,
+  setEnabledModels,
+} from '../services/settings';
+import { isProvider, MODEL_CATALOG, PROVIDERS } from '../services/ai/models';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -33,15 +43,55 @@ const upload = multer({
   limits: { fileSize: maxSizeMB * 1024 * 1024 },
 });
 
+/**
+ * Everything the General page shows. API keys appear only as their source
+ * and last four characters: the keys themselves never leave the server.
+ */
+async function generalSettingsResponse() {
+  const enabled = new Set(await getEnabledModels());
+  const keys = await Promise.all(PROVIDERS.map(async (p) => [p, await getApiKeyStatus(p)] as const));
+  return {
+    ...(await getGeneralSettings()),
+    server_default_model: SERVER_DEFAULT_MODEL,
+    api_keys: Object.fromEntries(keys),
+    models: MODEL_CATALOG.map((m) => ({ ...m, enabled: enabled.has(m.id) })),
+  };
+}
+
 /** General: the defaults for every user without their own model or prompt. */
 router.get('/settings', async (_req: Request, res: Response) => {
-  res.json({ ...(await getGeneralSettings()), server_default_model: SERVER_DEFAULT_MODEL });
+  res.json(await generalSettingsResponse());
 });
 
 router.put('/settings', async (req: Request, res: Response) => {
   const { default_model, default_model_provider, default_system_prompt } = req.body;
-  const saved = await saveGeneralSettings({ default_model, default_model_provider, default_system_prompt });
-  res.json({ ...saved, server_default_model: SERVER_DEFAULT_MODEL });
+  await saveGeneralSettings({ default_model, default_model_provider, default_system_prompt });
+  res.json(await generalSettingsResponse());
+});
+
+/** Replaces the provider's saved key. Write-only: it is never read back. */
+router.put('/settings/api-keys/:provider', async (req: Request, res: Response) => {
+  const { provider } = req.params;
+  const apiKey = String(req.body.api_key ?? '').trim();
+  if (!isProvider(provider)) { res.status(404).json({ error: 'Unknown provider' }); return; }
+  if (apiKey.length < 8) { res.status(400).json({ error: 'Paste the full API key' }); return; }
+  await saveApiKey(provider, apiKey);
+  res.json(await generalSettingsResponse());
+});
+
+/** Forgets the saved key, so the provider falls back to the server's .env key. */
+router.delete('/settings/api-keys/:provider', async (req: Request, res: Response) => {
+  const { provider } = req.params;
+  if (!isProvider(provider)) { res.status(404).json({ error: 'Unknown provider' }); return; }
+  await removeApiKey(provider);
+  res.json(await generalSettingsResponse());
+});
+
+/** Which models the dropdowns offer. Users keep a model even after it is hidden. */
+router.put('/settings/models', async (req: Request, res: Response) => {
+  if (!Array.isArray(req.body.enabled)) { res.status(400).json({ error: '"enabled" must be a list of model ids' }); return; }
+  await setEnabledModels(req.body.enabled.map(String));
+  res.json(await generalSettingsResponse());
 });
 
 /** Replaces google_id, which the admin UI has no use for, with whether it is set. */

@@ -4,6 +4,7 @@ import { Check, Save } from 'lucide-react';
 import { api, GeneralSettings } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { ModelSelect } from './ModelSelect';
+import { ModelSelectionPanel } from './ModelSelectionPanel';
 
 interface GeneralPanelProps {
   settings: GeneralSettings;
@@ -19,11 +20,13 @@ export function GeneralPanel({ settings, onSaved }: GeneralPanelProps) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Only when the saved defaults change: saving a key or ticking a model also
+  // replaces `settings`, and must not wipe an unsaved prompt.
   useEffect(() => {
     setModel(settings.default_model ?? '');
     setProvider(settings.default_model_provider ?? '');
     setPrompt(settings.default_system_prompt ?? '');
-  }, [settings]);
+  }, [settings.default_model, settings.default_model_provider, settings.default_system_prompt]);
 
   const save = async () => {
     setSaving(true);
@@ -57,6 +60,7 @@ export function GeneralPanel({ settings, onSaved }: GeneralPanelProps) {
             <label className="block text-xs text-text-muted mb-1.5">Default AI model</label>
             <ModelSelect
               value={model}
+              models={settings.models}
               onChange={(m, p) => { setModel(m); setProvider(p); }}
               defaultLabel={`Server default (${settings.server_default_model})`}
             />
@@ -81,6 +85,8 @@ export function GeneralPanel({ settings, onSaved }: GeneralPanelProps) {
           </Button>
         </div>
       </div>
+
+      <ModelSelectionPanel settings={settings} onSaved={onSaved} />
     </motion.div>
   );
 }

@@ -1,10 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { getApiKey } from '../settings';
 import { ChatProvider, MAX_TOOL_ROUNDS } from './types';
 
-let client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!client) client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  return client;
+// One client per key: a key saved under General replaces the old one at once.
+let cached: { key: string; client: Anthropic } | null = null;
+async function getClient(): Promise<Anthropic> {
+  const key = await getApiKey('claude');
+  if (!key) throw new Error('No Claude API key. Add one under Admin > General > Model selection.');
+  if (cached?.key !== key) cached = { key, client: new Anthropic({ apiKey: key }) };
+  return cached.client;
 }
 
 export const claudeChat: ChatProvider = async ({ model, systemPrompt, messages, tools, runTool }) => {
@@ -28,6 +32,7 @@ export const claudeChat: ChatProvider = async ({ model, systemPrompt, messages, 
     return { role: m.role, content: m.content };
   });
 
+  const client = await getClient();
   const customTools: Anthropic.Tool[] = (tools ?? []).map((t) => ({
     name: t.name,
     description: t.description,
@@ -40,7 +45,7 @@ export const claudeChat: ChatProvider = async ({ model, systemPrompt, messages, 
   let answer = '';
   for (let round = 0; ; round++) {
     const forceAnswer = round >= MAX_TOOL_ROUNDS && customTools.length > 0;
-    const response = await getClient().messages.create({
+    const response = await client.messages.create({
       model,
       max_tokens: 4096,
       system: systemPrompt,

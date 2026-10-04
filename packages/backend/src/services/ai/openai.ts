@@ -1,7 +1,15 @@
 import OpenAI from 'openai';
+import { getApiKey } from '../settings';
 import { ChatProvider, MAX_TOOL_ROUNDS } from './types';
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// One client per key: a key saved under General replaces the old one at once.
+let cached: { key: string; client: OpenAI } | null = null;
+export async function getOpenAIClient(): Promise<OpenAI> {
+  const key = await getApiKey('openai');
+  if (!key) throw new Error('No OpenAI API key. Add one under Admin > General > Model selection.');
+  if (cached?.key !== key) cached = { key, client: new OpenAI({ apiKey: key }) };
+  return cached.client;
+}
 
 export const openaiChat: ChatProvider = async ({ model, systemPrompt, messages, tools, runTool }) => {
   const input: OpenAI.Responses.ResponseInputItem[] = messages.map((m) => {
@@ -21,6 +29,7 @@ export const openaiChat: ChatProvider = async ({ model, systemPrompt, messages, 
     return { role: m.role as 'user' | 'assistant', content: m.content };
   });
 
+  const client = await getOpenAIClient();
   const functionTools: OpenAI.Responses.FunctionTool[] = (tools ?? []).map((t) => ({
     type: 'function',
     name: t.name,

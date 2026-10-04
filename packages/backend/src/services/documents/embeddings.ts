@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import { getOpenAIClient } from '../ai/openai';
 
 export const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL ?? 'text-embedding-3-large';
 export const EMBEDDING_DIMENSIONS = parseInt(process.env.EMBEDDING_DIMENSIONS ?? '3072', 10);
@@ -7,20 +7,13 @@ export const EMBEDDING_DIMENSIONS = parseInt(process.env.EMBEDDING_DIMENSIONS ??
 const BATCH_SIZE = 64;
 const MAX_RETRIES = 3;
 
-let client: OpenAI | null = null;
-function getClient(): OpenAI {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error('OPENAI_API_KEY is required for document embeddings');
-  }
-  client ??= new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  return client;
-}
 
 async function embedBatch(inputs: string[]): Promise<number[][]> {
   let lastError: unknown;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const res = await getClient().embeddings.create({
+      const client = await getOpenAIClient();
+      const res = await client.embeddings.create({
         model: EMBEDDING_MODEL,
         dimensions: EMBEDDING_DIMENSIONS,
         input: inputs,

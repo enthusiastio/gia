@@ -1,7 +1,12 @@
 import { FunctionDeclarationSchema, FunctionResponsePart, GoogleGenerativeAI, Part, Tool } from '@google/generative-ai';
+import { getApiKey } from '../settings';
 import { ChatProvider, MAX_TOOL_ROUNDS } from './types';
 
-const client = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY!);
+async function getClient(): Promise<GoogleGenerativeAI> {
+  const key = await getApiKey('gemini');
+  if (!key) throw new Error('No Gemini API key. Add one under Admin > General > Model selection.');
+  return new GoogleGenerativeAI(key);
+}
 
 export const geminiChat: ChatProvider = async ({ model, systemPrompt, messages, tools, runTool }) => {
   // Gemini will not combine Google Search with function calling in one
@@ -17,6 +22,7 @@ export const geminiChat: ChatProvider = async ({ model, systemPrompt, messages, 
         }]
       : [{ googleSearchRetrieval: {} }];
 
+  const client = await getClient();
   const genModel = client.getGenerativeModel({
     model,
     systemInstruction: systemPrompt,

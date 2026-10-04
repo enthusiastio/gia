@@ -1,4 +1,7 @@
 import knex from '../db/knex';
+import { logger } from '../logger';
+import { ENV_KEY_NAMES, MODEL_CATALOG, ProviderId } from './ai/models';
+import { decryptSecret, encryptSecret } from './secrets';
 
 export interface GeneralSettings {
   default_model: string | null;
@@ -58,4 +61,79 @@ export async function resolveUserAIConfig(userId: string): Promise<UserAIConfig>
     provider,
     systemPrompt: config?.system_prompt?.trim() || general.default_system_prompt?.trim() || FALLBACK_SYSTEM_PROMPT,
   };
+}
+
+async function readSetting(key: string): Promise<string | null> {
+  const row = await knex('app_settings').where({ key }).first('value');
+  return row?.value || null;
+}
+
+async function writeSetting(key: string, value: string | null): Promise<void> {
+  await knex('app_settings')
+    .insert({ key, value })
+    .onConflict('key')
+    .merge({ value, updated_at: knex.fn.now(6) });
+}
+
+const apiKeySetting = (provider: ProviderId) => `api_key_${provider}`;
+
+/**
+ * The key a provider call uses: the one saved under General, else the
+ * server's .env. Read on every call, so a newly saved key applies at once.
+ */
+export async function getApiKey(provider: ProviderId): Promise<string | null> {
+  const stored = await readSetting(apiKeySetting(provider));
+  if (stored) {
+    const key = decryptSecret(stored);
+    if (key) return key;
+    logger.error(`[settings] saved ${provider} API key cannot be decrypted; falling back to .env`);
+  }
+  return process.env[ENV_KEY_NAMES[provider]] || null;
+}
+
+export async function saveApiKey(provider: ProviderId, apiKey: string): Promise<void> {
+  await writeSetting(apiKeySetting(provider), encryptSecret(apiKey.trim()));
+}
+
+export async function removeApiKey(provider: ProviderId): Promise<void> {
+  await writeSetting(apiKeySetting(provider), null);
+}
+
+export interface ApiKeyStatus {
+  /** saved: entered under General; env: from the server's .env; none: no key at all. */
+  source: 'saved' | 'env' | 'none';
+  /** Last four characters, so admins can tell keys apart without seeing them. */
+  last4: string | null;
+}
+
+/** What the admin UI may know about a key: never the key itself. */
+export async function getApiKeyStatus(provider: ProviderId): Promise<ApiKeyStatus> {
+  const stored = await readSetting(apiKeySetting(provider));
+  const saved = stored ? decryptSecret(stored) : null;
+  if (saved) return { source: 'saved', last4: saved.slice(-4) };
+  const env = process.env[ENV_KEY_NAMES[provider]];
+  if (env) return { source: 'env', last4: env.slice(-4) };
+  return { source: 'none', last4: null };
+}
+
+/**
+ * Model ids the dropdowns offer. Never saved means all of them; this only
+ * changes what can be picked, not what users already have.
+ */
+export async function getEnabledModels(): Promise<string[]> {
+  const stored = await readSetting('enabled_models');
+  if (!stored) return MODEL_CATALOG.map((m) => m.id);
+  try {
+    const ids = JSON.parse(stored);
+    return Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : MODEL_CATALOG.map((m) => m.id);
+  } catch {
+    return MODEL_CATALOG.map((m) => m.id);
+  }
+}
+
+export async function setEnabledModels(ids: string[]): Promise<string[]> {
+  const known = new Set(MODEL_CATALOG.map((m) => m.id));
+  const clean = [...new Set(ids.filter((id) => known.has(id)))];
+  await writeSetting('enabled_models', JSON.stringify(clean));
+  return clean;
 }

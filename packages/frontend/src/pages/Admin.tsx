@@ -18,6 +18,7 @@ export default function Admin() {
   const [model, setModel] = useState('');
   const [modelProvider, setModelProvider] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
+  const [useDefaultPrompt, setUseDefaultPrompt] = useState(true);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -44,6 +45,7 @@ export default function Admin() {
     setModel(detail.model ?? '');
     setModelProvider(detail.model_provider ?? '');
     setSystemPrompt(detail.system_prompt ?? '');
+    setUseDefaultPrompt(!detail.system_prompt?.trim());
     setConfirmingDelete(false);
     setDeleteError(null);
   };
@@ -88,7 +90,10 @@ export default function Admin() {
   const handleSave = async () => {
     if (!selected) return;
     setSaving(true);
-    await api.admin.updateConfig(selected.id, { model, model_provider: modelProvider, system_prompt: systemPrompt });
+    // An empty prompt is what "use the default" means on the server.
+    const override = useDefaultPrompt ? '' : systemPrompt.trim();
+    await api.admin.updateConfig(selected.id, { model, model_provider: modelProvider, system_prompt: override });
+    if (!override) setUseDefaultPrompt(true);
     setSaving(false);
     const updated = await api.admin.users();
     setUsers(updated);
@@ -246,22 +251,57 @@ export default function Admin() {
                   <label className="block text-xs text-text-muted mb-1.5">AI Model</label>
                   <ModelSelect
                     value={model}
+                    models={settings?.models ?? []}
                     onChange={(m, p) => { setModel(m); setModelProvider(p); }}
                     defaultLabel={`Default (${settings?.default_model ?? settings?.server_default_model ?? 'General'})`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs text-text-muted mb-1.5">System Prompt</label>
-                  <textarea
-                    value={systemPrompt}
-                    onChange={(e) => setSystemPrompt(e.target.value)}
-                    placeholder={settings?.default_system_prompt
-                      ? 'Empty: uses the default prompt from General'
-                      : 'You are a personalized genetic health assistant...'}
-                    rows={5}
-                    className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-dim outline-none focus:border-primary/50 transition-colors resize-none leading-relaxed"
-                  />
+                  <div className="flex items-center justify-between gap-3 mb-1.5">
+                    <label htmlFor="user-system-prompt" className="text-xs text-text-muted">System Prompt</label>
+                    <label className="inline-flex items-center gap-2 text-xs text-text-muted cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={useDefaultPrompt}
+                        onChange={(e) => {
+                          const useDefault = e.target.checked;
+                          setUseDefaultPrompt(useDefault);
+                          // Start the override from the default rather than a blank box.
+                          if (!useDefault && !systemPrompt.trim()) {
+                            setSystemPrompt(settings?.default_system_prompt ?? '');
+                          }
+                        }}
+                        className="w-3.5 h-3.5 accent-primary"
+                      />
+                      Use the default system prompt
+                    </label>
+                  </div>
+                  {useDefaultPrompt ? (
+                    <>
+                      <textarea
+                        id="user-system-prompt"
+                        readOnly
+                        value={settings?.default_system_prompt ?? ''}
+                        placeholder="No default prompt set in General yet. The assistant uses: You are a helpful assistant."
+                        rows={5}
+                        className="w-full bg-surface border border-border border-dashed rounded-xl px-3 py-2 text-sm text-text-muted placeholder-text-dim outline-none resize-none leading-relaxed cursor-default"
+                      />
+                      <p className="text-[11px] text-text-dim mt-1">
+                        From General. Uncheck the box to write a prompt just for this user.
+                      </p>
+                    </>
+                  ) : (
+                    <textarea
+                      id="user-system-prompt"
+                      autoFocus
+                      value={systemPrompt}
+                      onChange={(e) => setSystemPrompt(e.target.value)}
+                      placeholder="You are a personalized genetic health assistant..."
+                      rows={5}
+                      className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-dim outline-none focus:border-primary/50 transition-colors resize-none leading-relaxed"
+                    />
+                  )}
                 </div>
 
                 <Button onClick={handleSave} disabled={saving} size="sm">
