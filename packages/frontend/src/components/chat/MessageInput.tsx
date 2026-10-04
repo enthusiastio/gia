@@ -1,5 +1,5 @@
 import { useState, useRef, KeyboardEvent } from 'react';
-import { ImagePlus, Camera, Send, X, Paperclip } from 'lucide-react';
+import { ImagePlus, Camera, ArrowUp, X, Paperclip } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { openGoogleDrivePicker } from '@/lib/googleDrivePicker';
@@ -92,16 +92,35 @@ export function MessageInput({ onSend, disabled }: MessageInputProps) {
     }
   };
 
+  const resetHeight = () => {
+    const el = textareaRef.current;
+    if (el) el.style.height = 'auto';
+  };
+
+  // The box empties the moment a message is sent, so the user can watch it
+  // land in the conversation and start typing the next one. If sending fails,
+  // the draft comes back to retry.
   const handleSend = async () => {
-    if ((!text.trim() && !image && !attachment) || sending) return;
+    if ((!text.trim() && !image && !attachment) || sending || disabled) return;
+    const draft = { text, image, imagePreview, attachment };
     setSending(true);
+    setText('');
+    setImage(null);
+    setImagePreview(null);
+    setAttachment(null);
+    if (fileRef.current) fileRef.current.value = '';
+    resetHeight();
     try {
-      await onSend(text.trim(), image ?? undefined, attachment ?? undefined);
-      setText('');
-      removeImage();
-      removeAttachment();
+      await onSend(draft.text.trim(), draft.image ?? undefined, draft.attachment ?? undefined);
+      if (draft.imagePreview) URL.revokeObjectURL(draft.imagePreview);
+    } catch {
+      setText((current) => current || draft.text);
+      setImage(draft.image);
+      setImagePreview(draft.imagePreview);
+      setAttachment(draft.attachment);
     } finally {
       setSending(false);
+      textareaRef.current?.focus();
     }
   };
 
@@ -121,7 +140,8 @@ export function MessageInput({ onSend, disabled }: MessageInputProps) {
   const canSend = (text.trim().length > 0 || image !== null || attachment !== null) && !sending && !disabled;
 
   return (
-    <div className="border-t border-border bg-surface px-4 pt-3 pb-3 pb-safe">
+    <div className="bg-gradient-to-t from-background via-background to-transparent px-4 pt-2 pb-3 pb-safe">
+      <div className="mx-auto w-full max-w-3xl">
       {/* Previews */}
       <AnimatePresence>
         {imagePreview && (
@@ -161,8 +181,8 @@ export function MessageInput({ onSend, disabled }: MessageInputProps) {
       </AnimatePresence>
 
       <div className={cn(
-        'flex items-end gap-2 bg-surface-2 border rounded-2xl px-3 py-2 transition-colors',
-        'border-border focus-within:border-primary/50'
+        'flex items-end gap-2 bg-surface-2 border rounded-2xl px-3 py-2 transition-[border-color,box-shadow] duration-200',
+        'border-border focus-within:border-primary/50 focus-within:shadow-[0_0_0_4px_rgba(124,109,245,0.12)]'
       )}>
         {/* Gallery */}
         <button
@@ -217,8 +237,7 @@ export function MessageInput({ onSend, disabled }: MessageInputProps) {
           value={text}
           onChange={handleTextChange}
           onKeyDown={handleKeyDown}
-          disabled={disabled || sending}
-          placeholder="Ask anything…"
+          placeholder="Ask about your health, food or reports…"
           rows={1}
           className="flex-1 bg-transparent resize-none outline-none text-sm text-text-primary placeholder-text-dim min-h-[36px] max-h-[200px] py-1.5 leading-relaxed"
         />
@@ -231,11 +250,13 @@ export function MessageInput({ onSend, disabled }: MessageInputProps) {
             'flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-150 mb-0.5',
             canSend ? 'bg-primary text-white hover:bg-primary-hover active:scale-90' : 'bg-surface text-text-dim cursor-not-allowed'
           )}
+          aria-label="Send message"
         >
-          <Send size={15} />
+          <ArrowUp size={16} strokeWidth={2.25} />
         </button>
       </div>
-      <p className="text-xs text-text-dim text-center mt-1.5">Enter to send · Shift+Enter for new line</p>
+      <p className="hidden md:block text-[11px] text-text-dim text-center mt-1.5">Enter to send · Shift+Enter for a new line</p>
+      </div>
     </div>
   );
 }

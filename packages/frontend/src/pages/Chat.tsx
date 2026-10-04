@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Menu } from "lucide-react";
+import { MotionConfig } from "framer-motion";
 import { Sidebar } from "@/components/chat/Sidebar";
 import { MessageList } from "@/components/chat/MessageList";
 import { MessageInput } from "@/components/chat/MessageInput";
@@ -74,27 +75,27 @@ export default function Chat() {
         image,
         attachment,
       );
-      // Reload messages to get proper IDs and any title update
-      const msgs = await api.conversations.messages(convId);
-      setMessages(msgs);
+      // Append rather than reload: reloading swaps the optimistic message for
+      // the stored one, which remounts it and replays its entrance animation.
+      // Switching conversations loads the stored versions anyway.
+      setMessages((prev) => [...prev, reply]);
       // Refresh conversation list to show updated title and timestamp
       const convs = await api.conversations.list();
       setConversations(convs);
     } catch (err) {
-      console.error('[chat] send failed:', err);
-      console.error('[chat] type:', typeof err);
-      console.error('[chat] message:', err instanceof Error ? err.message : String(err));
-      console.error('[chat] stack:', err instanceof Error ? err.stack : 'n/a');
+      console.error("[chat] send failed:", err);
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== tempUserMsg.id),
         {
           id: `err-${Date.now()}`,
           role: "assistant",
-          content: `Sorry, something went wrong. ${err instanceof Error ? err.message : String(err)}`,
+          content: `No answer came back: ${err instanceof Error ? err.message : String(err)}. Your message is back in the box below, so you can send it again.`,
           image_path: null,
           created_at: new Date().toISOString(),
         },
       ]);
+      // Lets the input restore the draft it cleared on send.
+      throw err;
     } finally {
       setAiLoading(false);
     }
@@ -108,6 +109,7 @@ export default function Chat() {
   if (!user) return null;
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="flex h-screen bg-background overflow-hidden">
       <Sidebar
         user={user}
@@ -137,9 +139,15 @@ export default function Chat() {
           </p>
         </div>
 
-        <MessageList messages={messages} loading={aiLoading} />
+        <MessageList
+          messages={messages}
+          loading={aiLoading}
+          userName={user.name}
+          onSuggest={(text) => handleSend(text).catch(() => {})}
+        />
         <MessageInput onSend={handleSend} disabled={aiLoading} />
       </div>
     </div>
+    </MotionConfig>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { FileText } from 'lucide-react';
 import { Message, Source } from '@/lib/api';
@@ -8,72 +8,136 @@ import { cn } from '@/lib/utils';
 interface MessageListProps {
   messages: Message[];
   loading: boolean;
+  userName: string;
+  onSuggest: (text: string) => void;
 }
 
-export function MessageList({ messages, loading }: MessageListProps) {
+/** Starting points that show what GIA is for, phrased the way users ask. */
+const SUGGESTIONS = [
+  'What should I eat for breakfast?',
+  'Summarise my latest blood test',
+  'Which supplements are in my protocol?',
+];
+
+/** Optimistic messages show their local preview; stored ones come from the server. */
+function imageSrc(path: string): string {
+  return path.startsWith('blob:') ? path : `/api/uploads/${path}`;
+}
+
+function GiaMark() {
+  return (
+    <div
+      aria-hidden="true"
+      className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-[10px] font-semibold tracking-wide text-primary"
+    >
+      GIA
+    </div>
+  );
+}
+
+function EmptyState({ userName, onSuggest }: { userName: string; onSuggest: (text: string) => void }) {
+  const firstName = userName.split(' ')[0];
+  return (
+    <div className="flex-1 flex items-center justify-center px-6 pb-10">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: 'easeOut' }}
+        className="w-full max-w-md text-center"
+      >
+        <p className="text-xl font-medium text-text-primary text-balance">
+          {firstName ? `Hi ${firstName}, what would you like to know?` : 'What would you like to know?'}
+        </p>
+        <p className="text-sm text-text-muted mt-2 text-balance">
+          Ask about your reports, or send a photo of a menu or a food label.
+        </p>
+        <div className="mt-6 flex flex-col gap-2">
+          {SUGGESTIONS.map((text, i) => (
+            <motion.button
+              key={text}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.15 + i * 0.06 }}
+              onClick={() => onSuggest(text)}
+              className="w-full text-left text-sm text-text-primary px-4 py-2.5 rounded-xl border border-border bg-surface hover:bg-surface-2 hover:border-primary/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              {text}
+            </motion.button>
+          ))}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+export function MessageList({ messages, loading, userName, onSuggest }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages, loading]);
 
   if (messages.length === 0 && !loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-center p-8">
-        <div>
-          <p className="text-text-muted text-sm">Start the conversation.</p>
-          <p className="text-text-dim text-xs mt-1">Upload an image or type your question.</p>
-        </div>
-      </div>
-    );
+    return <EmptyState userName={userName} onSuggest={onSuggest} />;
   }
 
   return (
-    <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 space-y-4">
-      {messages.map((msg, i) => (
-        <motion.div
-          key={msg.id}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25, delay: i === messages.length - 1 ? 0 : 0 }}
-          className={cn('flex w-full', msg.role === 'user' ? 'justify-end' : 'justify-start')}
-        >
-          <div
-            className={cn(
-              'min-w-0 max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-3 break-words',
-              msg.role === 'user'
-                ? 'bg-primary/20 text-text-primary rounded-br-sm'
-                : 'bg-surface-2 text-text-primary rounded-bl-sm border border-border'
-            )}
-          >
-            {msg.image_path && (
-              <img
-                src={`/api/uploads/${msg.image_path}`}
-                alt="Uploaded"
-                className="rounded-xl mb-2 max-h-64 w-auto object-contain"
-              />
-            )}
-            <div className={cn('text-sm leading-relaxed', msg.role === 'assistant' && 'prose prose-sm max-w-none')}>
-              {msg.role === 'assistant' ? (
-                <ReactMarkdown>{msg.content}</ReactMarkdown>
-              ) : (
-                <p className="whitespace-pre-wrap">{msg.content}</p>
-              )}
-            </div>
-            {msg.role === 'assistant' && <SourceChips sources={msg.sources} />}
-          </div>
-        </motion.div>
-      ))}
+    <div className="flex-1 overflow-y-auto overflow-x-hidden">
+      <div className="mx-auto w-full max-w-3xl px-4 py-6 space-y-6">
+        {messages.map((msg) =>
+          msg.role === 'user' ? (
+            // Rises out of the input box it was just typed into.
+            <motion.div
+              key={msg.id}
+              initial={{ opacity: 0, y: 28, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+              style={{ transformOrigin: 'bottom right' }}
+              className="flex justify-end"
+            >
+              <div className="min-w-0 max-w-[85%] md:max-w-[75%] rounded-2xl rounded-br-md bg-primary/20 border border-primary/20 px-4 py-2.5 break-words">
+                {msg.image_path && (
+                  <img src={imageSrc(msg.image_path)} alt="Uploaded" className="rounded-xl mb-2 max-h-64 w-auto object-contain" />
+                )}
+                <p className="text-sm leading-relaxed text-text-primary whitespace-pre-wrap">{msg.content}</p>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key={msg.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: 'easeOut' }}
+              className="flex gap-3"
+            >
+              <GiaMark />
+              <div className="min-w-0 flex-1 pt-0.5 break-words">
+                <div className="prose prose-sm max-w-none text-[0.9rem] leading-7">
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
+                <SourceChips sources={msg.sources} />
+              </div>
+            </motion.div>
+          )
+        )}
 
-      {loading && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
-          <div className="bg-surface-2 border border-border rounded-2xl rounded-bl-sm px-4 py-3">
-            <ThinkingDots />
-          </div>
-        </motion.div>
-      )}
+        <AnimatePresence>
+          {loading && (
+            <motion.div
+              key="thinking"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0, transition: { delay: 0.25 } }}
+              exit={{ opacity: 0, transition: { duration: 0.15 } }}
+              className="flex gap-3 items-center"
+            >
+              <GiaMark />
+              <ThinkingDots />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      <div ref={bottomRef} />
+        <div ref={bottomRef} />
+      </div>
     </div>
   );
 }
@@ -95,7 +159,7 @@ function SourceChips({ sources }: { sources?: Source[] | null }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 mt-3 pt-2.5 border-t border-border">
+    <div className="flex flex-wrap items-center gap-1.5 mt-3">
       <span className="text-[11px] text-text-dim mr-0.5">Sources</span>
       {[...byFile.values()].map(({ source, headings }) => (
         <span
