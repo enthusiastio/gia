@@ -5,8 +5,8 @@ const MODEL_PROVIDERS: Record<string, string> = {
   'gpt-5.5': 'openai', 'gpt-5.4': 'openai', 'gpt-5.4-mini': 'openai', 'gpt-4o': 'openai',
   'gemini-3.5-flash': 'gemini', 'gemini-2.5-pro': 'gemini', 'gemini-2.5-flash': 'gemini',
 };
-import { motion } from 'framer-motion';
-import { ArrowLeft, Save, Trash2, Users } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ArrowLeft, Plus, Save, Trash2, Users } from 'lucide-react';
 import { api, AdminUser } from '@/lib/api';
 import { DocumentPanel } from '@/components/admin/DocumentPanel';
 import { Button } from '@/components/ui/Button';
@@ -23,7 +23,11 @@ export default function Admin() {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-
+  const [adding, setAdding] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [newName, setNewName] = useState('');
+  const [addError, setAddError] = useState<string | null>(null);
+  const [addBusy, setAddBusy] = useState(false);
 
   useEffect(() => {
     api.admin.users().then(setUsers).catch(console.error);
@@ -55,6 +59,26 @@ export default function Admin() {
     }
   };
 
+  // Adds the user and opens them straight away, so their documents can be
+  // uploaded before they ever sign in.
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddBusy(true);
+    setAddError(null);
+    try {
+      const created = await api.admin.createUser(newEmail.trim(), newName.trim() || undefined);
+      setUsers(await api.admin.users());
+      setAdding(false);
+      setNewEmail('');
+      setNewName('');
+      await selectUser(created);
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : 'Could not add the user');
+    } finally {
+      setAddBusy(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!selected) return;
     setSaving(true);
@@ -75,40 +99,102 @@ export default function Admin() {
       </div>
 
       <div className="max-w-5xl mx-auto p-4 md:p-6 grid md:grid-cols-[280px_1fr] gap-4">
-        {/* User list */}
-        <div className="bg-surface border border-border rounded-2xl overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <Users size={15} className="text-text-muted" />
-            <h2 className="text-sm font-medium text-text-primary">Users ({users.length})</h2>
-          </div>
-          <div className="divide-y divide-border">
-            {users.map((u) => (
-              <button
-                key={u.id}
-                onClick={() => selectUser(u)}
-                className={`w-full text-left px-4 py-3 hover:bg-surface-2 transition-colors ${selected?.id === u.id ? 'bg-primary/10' : ''}`}
-              >
-                <div className="flex items-center gap-3">
-                  {u.avatar_url ? (
-                    <img src={u.avatar_url} alt={u.name} className="w-8 h-8 rounded-full flex-shrink-0" />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs text-primary font-medium flex-shrink-0">
-                      {u.name[0]}
+        {/* User list, with the add control where the new user will appear */}
+        <div className="space-y-2 self-start">
+          <div className="bg-surface border border-border rounded-2xl overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+              <Users size={15} className="text-text-muted" />
+              <h2 className="text-sm font-medium text-text-primary">Users ({users.length})</h2>
+            </div>
+            <div className="divide-y divide-border">
+              {users.map((u) => (
+                <motion.button
+                  key={u.id}
+                  layout="position"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  onClick={() => selectUser(u)}
+                  className={`w-full text-left px-4 py-3 hover:bg-surface-2 transition-colors ${selected?.id === u.id ? 'bg-primary/10' : ''}`}
+                >
+                  <div className="flex items-center gap-3">
+                    {u.avatar_url ? (
+                      <img src={u.avatar_url} alt={u.name} className="w-8 h-8 rounded-full flex-shrink-0" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs text-primary font-medium flex-shrink-0">
+                        {u.name[0]}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm text-text-primary truncate">{u.name}</p>
+                      <p className="text-xs text-text-dim truncate">{u.email}</p>
                     </div>
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-sm text-text-primary truncate">{u.name}</p>
-                    <p className="text-xs text-text-dim truncate">{u.email}</p>
                   </div>
-                </div>
-                <div className="flex gap-3 mt-1.5 pl-11 text-xs text-text-dim">
-                  <span>{u.conversation_count} convs</span>
-                  {u.is_admin && <span className="text-primary">admin</span>}
-                  {u.model && <span className="text-accent truncate">{u.model}</span>}
-                </div>
-              </button>
-            ))}
+                  <div className="flex gap-3 mt-1.5 pl-11 text-xs text-text-dim">
+                    {u.has_signed_in
+                      ? <span>{u.conversation_count} convs</span>
+                      : <span className="text-amber-400">not signed in yet</span>}
+                    {u.is_admin && <span className="text-primary">admin</span>}
+                    {u.model && <span className="text-accent truncate">{u.model}</span>}
+                  </div>
+                </motion.button>
+              ))}
+            </div>
           </div>
+
+          <AnimatePresence mode="wait" initial={false}>
+            {adding ? (
+              <motion.form
+                key="form"
+                onSubmit={handleAdd}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.15 }}
+                className="bg-surface border border-primary/40 rounded-2xl px-4 py-3 space-y-2"
+              >
+                <input
+                  type="email"
+                  required
+                  autoFocus
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="Their Google email"
+                  className="w-full bg-surface-2 border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-primary placeholder-text-dim outline-none focus:border-primary/50"
+                />
+                <input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Name (optional)"
+                  className="w-full bg-surface-2 border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-primary placeholder-text-dim outline-none focus:border-primary/50"
+                />
+                {addError && <p className="text-xs text-red-400">{addError}</p>}
+                <p className="text-[11px] text-text-dim leading-relaxed">
+                  They can sign in once added. Documents you upload now will be waiting for them.
+                </p>
+                <div className="flex gap-2">
+                  <Button type="submit" size="sm" disabled={addBusy}>{addBusy ? 'Adding…' : 'Add user'}</Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => { setAdding(false); setAddError(null); }}>
+                    Cancel
+                  </Button>
+                </div>
+              </motion.form>
+            ) : (
+              <motion.button
+                key="add"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                onClick={() => setAdding(true)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl border border-dashed border-border text-text-muted hover:text-text-primary hover:border-primary/40 hover:bg-surface transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <span className="w-8 h-8 rounded-full border border-dashed border-current flex items-center justify-center flex-shrink-0">
+                  <Plus size={14} />
+                </span>
+                <span className="text-sm">Add user</span>
+              </motion.button>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* User detail */}
@@ -124,6 +210,13 @@ export default function Admin() {
               <h2 className="text-sm font-semibold text-text-primary mb-4">
                 {selected.name} — Configuration
               </h2>
+
+              {!selected.has_signed_in && (
+                <p className="text-xs text-amber-400 bg-amber-500/10 rounded-xl px-3 py-2 -mt-2 mb-4 leading-relaxed">
+                  Not signed in yet. When they sign in with Google as {selected.email}, this
+                  configuration and their documents become theirs.
+                </p>
+              )}
 
               <div className="space-y-4">
                 <div>

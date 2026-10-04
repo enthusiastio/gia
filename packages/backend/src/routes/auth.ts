@@ -7,6 +7,14 @@ import { requireAuth } from "../middleware/auth";
 
 const router = Router();
 
+/** ADMIN_EMAILS, comma separated, compared case-insensitively. */
+function adminEmails(): string[] {
+  return (process.env.ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 passport.use(
   new GoogleStrategy(
     {
@@ -17,25 +25,54 @@ passport.use(
     async (_accessToken, _refreshToken, profile: Profile, done) => {
       try {
         const googleId = profile.id;
-        const email = profile.emails?.[0]?.value ?? "";
+        const googleEmail = profile.emails?.[0];
+        const email = (googleEmail?.value ?? "").trim().toLowerCase();
         const name = profile.displayName;
         const avatarUrl = profile.photos?.[0]?.value ?? null;
+        const isAdminEmail = adminEmails().includes(email);
 
-        let [user] = await knex("users").where({ google_id: googleId });
-
-        const adminEmails = process.env.ADMIN_EMAILS?.split(",") ?? [];
-
-        const is_admin = adminEmails.includes(email);
-        if (!user) {
-          user = await insertRow("users", {
-            google_id: googleId,
-            email,
-            name,
-            avatar_url: avatarUrl,
-            is_admin,
-          });
+        // Returning user: already linked to this Google account.
+        const [linked] = await knex("users").where({ google_id: googleId });
+        if (linked) {
+          done(null, linked);
+          return;
         }
 
+        // Everything below matches on email, so only an address Google has
+        // verified may claim an account; otherwise anyone could register a
+        // Google account under someone else's address and take their files.
+        if (!email || googleEmail?.verified === false) {
+          done(null, false);
+          return;
+        }
+
+        // Added by an admin and signing in for the first time: link this
+        // Google account, and the documents uploaded for them come with it.
+        const [invited] = await knex("users").where({ email }).whereNull("google_id");
+        if (invited) {
+          await knex("users").where({ id: invited.id }).update({
+            google_id: googleId,
+            name: name || invited.name,
+            avatar_url: avatarUrl,
+            is_admin: invited.is_admin || isAdminEmail,
+          });
+          done(null, await knex("users").where({ id: invited.id }).first());
+          return;
+        }
+
+        // Sign-in is by invitation only. Admin emails are the exception, so
+        // a fresh install always has someone who can add the others.
+        if (!isAdminEmail) {
+          done(null, false);
+          return;
+        }
+        const user = await insertRow<Express.User>("users", {
+          google_id: googleId,
+          email,
+          name,
+          avatar_url: avatarUrl,
+          is_admin: true,
+        });
         done(null, user);
       } catch (err) {
         done(err as Error);
@@ -56,7 +93,8 @@ router.get(
   "/google/callback",
   passport.authenticate("google", {
     session: false,
-    failureRedirect: `${process.env.FRONTEND_URL}/login?error=1`,
+    // The only refusal is an email no admin has added (or an unverified one).
+    failureRedirect: `${process.env.FRONTEND_URL}/login?error=not_invited`,
   }),
   (req: Request, res: Response) => {
     const user = req.user as { id: string; email: string; is_admin: boolean };

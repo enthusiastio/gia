@@ -96,6 +96,8 @@ export interface AdminUser extends User {
   model_provider: string | null;
   system_prompt: string | null;
   conversation_count: number;
+  /** False until the person first signs in with Google. */
+  has_signed_in: boolean;
   files?: UserFile[];
 }
 
@@ -133,6 +135,12 @@ export const api = {
 
   admin: {
     users: () => request<AdminUser[]>(`${BASE}/admin/users`),
+    createUser: (email: string, name?: string) =>
+      request<AdminUser>(`${BASE}/admin/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name }),
+      }),
     user: (id: string) => request<AdminUser>(`${BASE}/admin/users/${id}`),
     updateConfig: (id: string, config: { model?: string; model_provider?: string; system_prompt?: string; is_admin?: boolean }) =>
       request<{ ok: boolean }>(`${BASE}/admin/users/${id}/config`, {

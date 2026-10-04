@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
-import knex from '../db/knex';
+import knex, { insertRow } from '../db/knex';
 import { v4 as uuidv4 } from 'uuid';
 import { documentFileFilter, withUploadErrors } from '../services/documents/fileTypes';
 import {
@@ -32,15 +32,52 @@ const upload = multer({
   limits: { fileSize: maxSizeMB * 1024 * 1024 },
 });
 
+/** Replaces google_id, which the admin UI has no use for, with whether it is set. */
+function withSignInState<T extends { google_id?: string | null }>(user: T) {
+  const { google_id, ...rest } = user;
+  return { ...rest, has_signed_in: Boolean(google_id) };
+}
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Adds a user before they ever sign in, so their documents can be uploaded
+ * in advance. Their first Google sign-in with this email links the account.
+ */
+router.post('/users', async (req: Request, res: Response) => {
+  const email = String(req.body.email ?? '').trim().toLowerCase();
+  if (!EMAIL_PATTERN.test(email)) {
+    res.status(400).json({ error: 'Enter a valid email address' });
+    return;
+  }
+
+  const existing = await knex('users').where({ email }).first('id');
+  if (existing) {
+    res.status(409).json({ error: `${email} already has an account` });
+    return;
+  }
+
+  const name = String(req.body.name ?? '').trim() || email.split('@')[0];
+  const user = await insertRow<{ google_id: string | null }>('users', {
+    email,
+    name,
+    google_id: null,
+    is_admin: false,
+  });
+  res.status(201).json({ ...withSignInState(user), conversation_count: 0 });
+});
+
 router.get('/users', async (_req: Request, res: Response) => {
   const users = await knex('users')
     .leftJoin('user_configs', 'users.id', 'user_configs.user_id')
     .select(
       'users.id', 'users.email', 'users.name', 'users.avatar_url',
-      'users.is_admin', 'users.created_at',
+      'users.is_admin', 'users.created_at', 'users.google_id',
       'user_configs.model', 'user_configs.model_provider', 'user_configs.system_prompt'
     )
-    .orderBy('users.created_at', 'desc');
+    // Oldest first, so a newly added user appears at the bottom, right where
+    // the admin panel's "Add user" control sits.
+    .orderBy('users.created_at', 'asc');
 
   const counts = await knex('conversations')
     .select('user_id')
@@ -48,7 +85,7 @@ router.get('/users', async (_req: Request, res: Response) => {
     .groupBy('user_id');
 
   const countMap = Object.fromEntries(counts.map((c) => [c.user_id, Number(c.count)]));
-  res.json(users.map((u) => ({ ...u, conversation_count: countMap[u.id] ?? 0 })));
+  res.json(users.map((u) => ({ ...withSignInState(u), conversation_count: countMap[u.id] ?? 0 })));
 });
 
 router.get('/users/:id', async (req: Request, res: Response) => {
@@ -60,7 +97,7 @@ router.get('/users/:id', async (req: Request, res: Response) => {
 
   const files = await listUserDocuments(String(req.params.id));
 
-  res.json({ ...user, files });
+  res.json({ ...withSignInState(user), files });
 });
 
 router.put('/users/:id/config', async (req: Request, res: Response) => {

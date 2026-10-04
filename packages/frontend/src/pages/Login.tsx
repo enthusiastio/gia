@@ -1,7 +1,14 @@
 import { motion } from 'framer-motion';
 import { Dna } from 'lucide-react';
 
+const ERRORS: Record<string, string> = {
+  not_invited:
+    "This Google account doesn't have access yet. Ask your practitioner to add the email you signed in with.",
+};
+
 export default function Login() {
+  const error = ERRORS[new URLSearchParams(window.location.search).get('error') ?? ''];
+
   const handleGoogleLogin = () => {
     window.location.href = '/api/auth/google';
   };
@@ -31,6 +38,12 @@ export default function Login() {
           <p className="text-sm text-text-muted mb-8">
             Access your personalized genetic analysis assistant.
           </p>
+
+          {error && (
+            <p role="alert" className="text-sm text-red-400 bg-red-500/10 rounded-xl px-3 py-2.5 -mt-4 mb-6 leading-relaxed">
+              {error}
+            </p>
+          )}
 
           <button
             onClick={handleGoogleLogin}
