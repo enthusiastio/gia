@@ -49,7 +49,7 @@ export async function embedQuery(text: string): Promise<number[]> {
   return embedding;
 }
 
-/** pgvector's text input format. */
+/** The text format MariaDB's VEC_FromText() parses. */
 export function toVectorLiteral(embedding: number[]): string {
   return `[${embedding.join(',')}]`;
 }

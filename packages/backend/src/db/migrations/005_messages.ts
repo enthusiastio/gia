@@ -2,12 +2,13 @@ import { Knex } from 'knex';
 
 export async function up(knex: Knex): Promise<void> {
   await knex.schema.createTable('messages', (t) => {
-    t.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
+    t.uuid('id').primary().defaultTo(knex.raw('(UUID())'));
     t.uuid('conversation_id').notNullable().references('id').inTable('conversations').onDelete('CASCADE');
     t.enum('role', ['user', 'assistant']).notNullable();
-    t.text('content').notNullable();
+    // Attachments are inlined into the message, so TEXT's 64 KB is too small.
+    t.text('content', 'longtext').notNullable();
     t.string('image_path');
-    t.timestamp('created_at').notNullable().defaultTo(knex.fn.now());
+    t.datetime('created_at', { precision: 6 }).notNullable().defaultTo(knex.fn.now(6));
   });
 }
 

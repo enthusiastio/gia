@@ -5,13 +5,13 @@ import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import knex from '../db/knex';
 import { v4 as uuidv4 } from 'uuid';
-import { DOCUMENT_CATEGORIES, CATEGORY_LABELS } from '../services/documents/categories';
+import { documentFileFilter, withUploadErrors } from '../services/documents/fileTypes';
 import {
+  addUserDocument,
   deleteUserDocument,
   getUserDocumentBlob,
   listUserDocuments,
   reingestUserDocument,
-  replaceUserDocument,
   updateUserDocument,
 } from '../services/documents/store';
 import { deleteUserAccount } from '../services/users';
@@ -22,11 +22,15 @@ router.use(requireAuth, requireAdmin);
 const uploadDir = process.env.UPLOAD_DIR ?? './uploads';
 const maxSizeMB = parseInt(process.env.MAX_FILE_SIZE_MB ?? '20', 10);
 
-const geneticStorage = multer.diskStorage({
+const documentStorage = multer.diskStorage({
   destination: path.join(uploadDir, 'genetic'),
   filename: (_req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`),
 });
-const upload = multer({ storage: geneticStorage, limits: { fileSize: maxSizeMB * 1024 * 1024 } });
+const upload = multer({
+  storage: documentStorage,
+  fileFilter: documentFileFilter,
+  limits: { fileSize: maxSizeMB * 1024 * 1024 },
+});
 
 router.get('/users', async (_req: Request, res: Response) => {
   const users = await knex('users')
@@ -86,20 +90,14 @@ router.delete('/users/:id', async (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
-router.get('/document-categories', (_req: Request, res: Response) => {
-  res.json(DOCUMENT_CATEGORIES.map((value) => ({ value, label: CATEGORY_LABELS[value] })));
-});
-
-router.post('/users/:id/files', upload.single('file'), async (req: Request, res: Response) => {
+router.post('/users/:id/files', withUploadErrors(upload.single('file'), maxSizeMB), async (req: Request, res: Response) => {
   if (!req.file) { res.status(400).json({ error: 'No file' }); return; }
 
   try {
-    const record = await replaceUserDocument(
-      String(req.params.id),
-      req.file,
-      req.body.category,
-      req.body.description
-    );
+    const record = await addUserDocument(String(req.params.id), req.file, {
+      title: req.body.title,
+      description: req.body.description,
+    });
     res.status(201).json(record);
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -107,8 +105,14 @@ router.post('/users/:id/files', upload.single('file'), async (req: Request, res:
 });
 
 router.patch('/users/:id/files/:fileId', async (req: Request, res: Response) => {
-  const { description, document_date } = req.body;
-  const record = await updateUserDocument(String(req.params.id), String(req.params.fileId), { description, document_date });
+  const { title, description, tags, document_date, always_include } = req.body;
+  const record = await updateUserDocument(String(req.params.id), String(req.params.fileId), {
+    title,
+    description,
+    tags,
+    document_date,
+    always_include,
+  });
   if (!record) { res.status(404).json({ error: 'Not found' }); return; }
   res.json(record);
 });

@@ -7,16 +7,16 @@ const pdfParse: (
   buf: Buffer,
 ) => Promise<{ text: string }> = require("pdf-parse");
 import { requireAuth } from "../middleware/auth";
-import knex from "../db/knex";
+import knex, { insertRow } from "../db/knex";
 import { getAIProvider } from "../services/ai";
 import { ChatMessage } from "../services/ai/types";
 import { createLogger } from "../logger";
 import { v4 as uuidv4 } from "uuid";
+import { buildDocumentPrompt, Source } from "../services/documents/retrieval";
 import {
-  buildContext,
-  CONTEXT_INSTRUCTIONS,
-  Source,
-} from "../services/documents/retrieval";
+  createDocumentTools,
+  DocumentTools,
+} from "../services/documents/tools";
 
 const router = Router();
 router.use(requireAuth);
@@ -64,9 +64,10 @@ router.get("/conversations", async (req: Request, res: Response) => {
 });
 
 router.post("/conversations", async (req: Request, res: Response) => {
-  const [conv] = await knex("conversations")
-    .insert({ user_id: req.user!.id, title: "New conversation" })
-    .returning("*");
+  const conv = await insertRow("conversations", {
+    user_id: req.user!.id,
+    title: "New conversation",
+  });
   res.status(201).json(conv);
 });
 
@@ -150,7 +151,7 @@ router.post(
       ? `[Attached file: ${attachmentFile!.originalname}]\n${attachmentText}\n\n${userText}`.trim()
       : userText;
 
-    await knex("messages").insert({
+    await insertRow("messages", {
       conversation_id: conv.id,
       role: "user",
       content: effectiveUserText,
@@ -171,21 +172,23 @@ router.post(
     const basePrompt =
       userConfig?.system_prompt ?? "You are a helpful assistant.";
 
-    // Retrieval: the user's pinned documents in full plus the excerpts that match
-    // this question, scoped to their own files only.
+    // Documents: a manifest of the user's files plus the ones marked "always
+    // include", with tools the model uses to search and read the rest. All of
+    // it is scoped to this user's own files.
     let systemPrompt = basePrompt;
-    let sources: Source[] = [];
+    let pinnedSources: Source[] = [];
+    let documentTools: DocumentTools | null = null;
     try {
-      const context = await buildContext(req.user!.id, userText);
-      if (context.hasDocuments) {
-        sources = context.sources;
+      const documents = await buildDocumentPrompt(req.user!.id);
+      if (documents.hasDocuments) {
+        pinnedSources = documents.sources;
+        documentTools = createDocumentTools(req.user!.id);
         // The operator's prompt goes last, closest to the question. Placed first
         // it sits behind ~15KB of records and loses to them on style; placed
         // here it governs how the grounded answer is actually written.
         systemPrompt = [
-          CONTEXT_INSTRUCTIONS,
           "--- USER HEALTH DOCUMENTS ---",
-          context.contextBlock,
+          documents.prompt,
           "--- END OF USER HEALTH DOCUMENTS ---",
           basePrompt,
         ].join("\n\n");
@@ -224,16 +227,27 @@ router.post(
 
     try {
       const aiChat = getAIProvider(modelProvider);
-      const reply = await aiChat({ model, systemPrompt, messages: aiMessages });
+      const reply = await aiChat({
+        model,
+        systemPrompt,
+        messages: aiMessages,
+        tools: documentTools?.specs,
+        runTool: documentTools?.run,
+      });
+      const sources = [...pinnedSources, ...(documentTools?.sources ?? [])];
+      if (documentTools) {
+        createLogger(req.user!.id).info(
+          "[chat] document tool calls",
+          documentTools.callCount(),
+        );
+      }
 
-      const [assistantMsg] = await knex("messages")
-        .insert({
-          conversation_id: conv.id,
-          role: "assistant",
-          content: reply,
-          sources: sources.length > 0 ? JSON.stringify(sources) : null,
-        })
-        .returning("*");
+      const assistantMsg = await insertRow("messages", {
+        conversation_id: conv.id,
+        role: "assistant",
+        content: reply,
+        sources: sources.length > 0 ? JSON.stringify(sources) : null,
+      });
 
       if (conv.title === "New conversation" && userText) {
         const title = userText.slice(0, 60);

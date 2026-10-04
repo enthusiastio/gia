@@ -2,11 +2,11 @@ import { Knex } from 'knex';
 
 export async function up(knex: Knex): Promise<void> {
   await knex.schema.createTable('conversations', (t) => {
-    t.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
+    t.uuid('id').primary().defaultTo(knex.raw('(UUID())'));
     t.uuid('user_id').notNullable().references('id').inTable('users').onDelete('CASCADE');
     t.string('title').notNullable().defaultTo('New conversation');
-    t.timestamp('created_at').notNullable().defaultTo(knex.fn.now());
-    t.timestamp('updated_at').notNullable().defaultTo(knex.fn.now());
+    t.datetime('created_at', { precision: 6 }).notNullable().defaultTo(knex.fn.now(6));
+    t.datetime('updated_at', { precision: 6 }).notNullable().defaultTo(knex.fn.now(6));
   });
 }
 

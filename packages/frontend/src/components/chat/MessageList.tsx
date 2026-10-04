@@ -109,7 +109,7 @@ function SourceChips({ sources }: { sources?: Source[] | null }) {
           )}
         >
           <FileText size={10} />
-          {source.category_label}
+          {source.title ?? source.file_name}
           {headings.length > 0 && (
             <span className="opacity-60">· {headings.length} section{headings.length > 1 ? 's' : ''}</span>
           )}

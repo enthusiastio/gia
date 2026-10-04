@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import passport from "passport";
 import { Strategy as GoogleStrategy, Profile } from "passport-google-oauth20";
 import jwt from "jsonwebtoken";
-import knex from "../db/knex";
+import knex, { insertRow } from "../db/knex";
 import { requireAuth } from "../middleware/auth";
 
 const router = Router();
@@ -27,15 +27,13 @@ passport.use(
 
         const is_admin = adminEmails.includes(email);
         if (!user) {
-          [user] = await knex("users")
-            .insert({
-              google_id: googleId,
-              email,
-              name,
-              avatar_url: avatarUrl,
-              is_admin,
-            })
-            .returning("*");
+          user = await insertRow("users", {
+            google_id: googleId,
+            email,
+            name,
+            avatar_url: avatarUrl,
+            is_admin,
+          });
         }
 
         done(null, user);

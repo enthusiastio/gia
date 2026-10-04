@@ -50,10 +50,9 @@ export interface Conversation {
 export interface Source {
   file_id: string;
   file_name: string;
-  category: string;
-  category_label: string;
+  title: string;
   heading: string | null;
-  kind: 'pinned' | 'retrieved';
+  kind: 'pinned' | 'retrieved' | 'read';
 }
 
 export interface Message {
@@ -67,24 +66,29 @@ export interface Message {
 
 export type DocumentStatus = 'pending' | 'processing' | 'ready' | 'failed';
 
-export interface DocumentCategory {
-  value: string;
-  label: string;
-}
-
 export interface UserFile {
   id: string;
   original_name: string;
   mime_type: string;
   size: number;
-  category: string;
+  title: string | null;
   description: string | null;
+  tags: string[] | null;
+  always_include: boolean;
   document_date: string | null;
   status: DocumentStatus;
   error: string | null;
   chunk_count: number;
   ingested_at: string | null;
   created_at: string;
+}
+
+export interface DocumentPatch {
+  title?: string | null;
+  description?: string | null;
+  tags?: string[];
+  document_date?: string | null;
+  always_include?: boolean;
 }
 
 export interface AdminUser extends User {
@@ -116,13 +120,12 @@ export const api = {
   },
 
   files: {
-    categories: () => request<DocumentCategory[]>(`${BASE}/files/categories`),
     list: () => request<UserFile[]>(`${BASE}/files`),
-    upload: (file: File, category: string, description?: string) => {
+    upload: (file: File, meta: { title?: string; description?: string } = {}) => {
       const form = new FormData();
       form.append('file', file);
-      form.append('category', category);
-      if (description) form.append('description', description);
+      if (meta.title) form.append('title', meta.title);
+      if (meta.description) form.append('description', meta.description);
       return request<UserFile>(`${BASE}/files`, { method: 'POST', body: form });
     },
     delete: (id: string) => request<{ ok: boolean }>(`${BASE}/files/${id}`, { method: 'DELETE' }),
@@ -139,15 +142,14 @@ export const api = {
       }),
     deleteUser: (id: string) =>
       request<{ ok: boolean }>(`${BASE}/admin/users/${id}`, { method: 'DELETE' }),
-    documentCategories: () => request<DocumentCategory[]>(`${BASE}/admin/document-categories`),
-    uploadFile: (userId: string, file: File, category: string, description?: string) => {
+    uploadFile: (userId: string, file: File, meta: { title?: string; description?: string } = {}) => {
       const form = new FormData();
       form.append('file', file);
-      form.append('category', category);
-      if (description) form.append('description', description);
+      if (meta.title) form.append('title', meta.title);
+      if (meta.description) form.append('description', meta.description);
       return request<UserFile>(`${BASE}/admin/users/${userId}/files`, { method: 'POST', body: form });
     },
-    updateFile: (userId: string, fileId: string, patch: { description?: string; document_date?: string | null }) =>
+    updateFile: (userId: string, fileId: string, patch: DocumentPatch) =>
       request<UserFile>(`${BASE}/admin/users/${userId}/files/${fileId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

@@ -197,18 +197,19 @@ const CONTEXT_CHARS = 240;
 /**
  * What actually gets embedded. Chunk bodies here are often terse data tables
  * whose vectors carry almost no topical signal on their own, so each one is
- * prefixed with its category, heading path and a slice of the document
- * description. That framing is what lets a question about "inflammation" reach
- * a table of hs-CRP values that never uses the word.
+ * prefixed with the document title, heading path, a slice of the document
+ * description and its tags. That framing is what lets a question about
+ * "inflammation" reach a table of hs-CRP values that never uses the word.
  */
 export function embeddableText(
   chunk: Chunk,
-  context?: { categoryLabel: string; description?: string | null }
+  context?: { title: string; description?: string | null; tags?: string[] }
 ): string {
   const parts: string[] = [];
   if (context) {
-    parts.push(chunk.heading ? `${context.categoryLabel} — ${chunk.heading}` : context.categoryLabel);
+    parts.push(chunk.heading ? `${context.title} > ${chunk.heading}` : context.title);
     if (context.description) parts.push(context.description.slice(0, CONTEXT_CHARS));
+    if (context.tags?.length) parts.push(`Tags: ${context.tags.join(', ')}`);
   } else if (chunk.heading) {
     parts.push(chunk.heading);
   }

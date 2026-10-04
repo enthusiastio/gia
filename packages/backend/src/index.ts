@@ -14,7 +14,7 @@ process.on("unhandledRejection", (reason) => {
 
 process.stdout.write("[BOOT] dotenv loaded\n");
 process.stdout.write(`[BOOT] GOOGLE_CLIENT_ID: ${process.env.GOOGLE_CLIENT_ID ? "SET" : "MISSING"}\n`);
-process.stdout.write(`[BOOT] DATABASE_URL: ${process.env.DATABASE_URL ? "SET" : "MISSING"}\n`);
+process.stdout.write(`[BOOT] DB: ${process.env.DB_USER ?? "?"}@${process.env.DB_HOST ?? "127.0.0.1"}:${process.env.DB_PORT ?? "3306"}/${process.env.DB_NAME ?? "MISSING"}\n`);
 process.stdout.write(`[BOOT] JWT_SECRET: ${process.env.JWT_SECRET ? "SET" : "MISSING"}\n`);
 process.stdout.write(`[BOOT] ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? "SET" : "MISSING"}\n`);
 process.stdout.write(`[BOOT] PORT: ${process.env.PORT}\n`);
