@@ -77,7 +77,7 @@ export function GeneralPanel({ settings, onSaved }: GeneralPanelProps) {
             />
           </div>
 
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-red-600">{error}</p>}
 
           <Button onClick={save} disabled={saving} size="sm">
             {saved ? <Check size={14} /> : <Save size={14} />}

@@ -17,10 +17,20 @@ export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [starters, setStarters] = useState<string[]>([]);
+
+  // A new random few each time the empty screen comes up.
+  const refreshStarters = useCallback(() => {
+    api.conversations
+      .starters()
+      .then((s) => setStarters(s.questions))
+      .catch(console.error);
+  }, []);
 
   useEffect(() => {
     api.conversations.list().then(setConversations).catch(console.error);
-  }, []);
+    refreshStarters();
+  }, [refreshStarters]);
 
   const loadConversation = useCallback(async (id: string) => {
     setActiveId(id);
@@ -34,6 +44,7 @@ export default function Chat() {
     setConversations((prev) => [conv, ...prev]);
     setActiveId(conv.id);
     setMessages([]);
+    refreshStarters();
   };
 
   const handleDelete = async (id: string) => {
@@ -42,6 +53,7 @@ export default function Chat() {
     if (activeId === id) {
       setActiveId(null);
       setMessages([]);
+      refreshStarters();
     }
   };
 
@@ -143,6 +155,8 @@ export default function Chat() {
           messages={messages}
           loading={aiLoading}
           userName={user.name}
+          language={user.preferred_language}
+          starters={starters}
           onSuggest={(text) => handleSend(text).catch(() => {})}
         />
         <MessageInput onSend={handleSend} disabled={aiLoading} />

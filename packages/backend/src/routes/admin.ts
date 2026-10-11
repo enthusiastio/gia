@@ -17,10 +17,13 @@ import {
 import { deleteUserAccount } from '../services/users';
 import {
   getApiKeyStatus,
+  getConversationStarters,
   getEnabledModels,
   getGeneralSettings,
+  isLanguage,
   removeApiKey,
   saveApiKey,
+  saveConversationStarters,
   saveGeneralSettings,
   SERVER_DEFAULT_MODEL,
   setEnabledModels,
@@ -94,6 +97,19 @@ router.put('/settings/models', async (req: Request, res: Response) => {
   res.json(await generalSettingsResponse());
 });
 
+/** Conversation starters: the questions offered on the empty chat screen, per language. */
+router.get('/starters', async (_req: Request, res: Response) => {
+  res.json(await getConversationStarters());
+});
+
+router.put('/starters/:language', async (req: Request, res: Response) => {
+  const { language } = req.params;
+  if (!isLanguage(language)) { res.status(404).json({ error: 'Unknown language' }); return; }
+  if (!Array.isArray(req.body.questions)) { res.status(400).json({ error: '"questions" must be a list' }); return; }
+  await saveConversationStarters(language, req.body.questions.map(String));
+  res.json(await getConversationStarters());
+});
+
 /** Replaces google_id, which the admin UI has no use for, with whether it is set. */
 function withSignInState<T extends { google_id?: string | null }>(user: T) {
   const { google_id, ...rest } = user;
@@ -134,7 +150,7 @@ router.get('/users', async (_req: Request, res: Response) => {
     .leftJoin('user_configs', 'users.id', 'user_configs.user_id')
     .select(
       'users.id', 'users.email', 'users.name', 'users.avatar_url',
-      'users.is_admin', 'users.created_at', 'users.google_id',
+      'users.is_admin', 'users.created_at', 'users.google_id', 'users.preferred_language',
       'user_configs.model', 'user_configs.model_provider', 'user_configs.user_data'
     )
     // Oldest first, so a newly added user appears at the bottom, right where
@@ -163,12 +179,20 @@ router.get('/users/:id', async (req: Request, res: Response) => {
 });
 
 router.put('/users/:id/config', async (req: Request, res: Response) => {
-  const { model, model_provider, is_admin } = req.body;
+  const { model, model_provider, is_admin, preferred_language } = req.body;
   // Left out of the request means leave as is; empty means clear.
   const user_data = req.body.user_data === undefined ? undefined : String(req.body.user_data ?? '').trim() || null;
 
+  if (preferred_language !== undefined && !isLanguage(preferred_language)) {
+    res.status(400).json({ error: 'Unknown language' });
+    return;
+  }
+
   if (is_admin !== undefined) {
     await knex('users').where({ id: req.params.id }).update({ is_admin: Boolean(is_admin) });
+  }
+  if (preferred_language !== undefined) {
+    await knex('users').where({ id: req.params.id }).update({ preferred_language });
   }
 
   const [existing] = await knex('user_configs').where({ user_id: req.params.id });

@@ -32,12 +32,18 @@ async function download(url: string, fallbackName: string): Promise<void> {
   URL.revokeObjectURL(objectUrl);
 }
 
+export type Language = 'en' | 'es';
+
+export type ConversationStarters = Record<Language, string[]>;
+
 export interface User {
   id: string;
   email: string;
   name: string;
   avatar_url: string | null;
   is_admin: boolean;
+  /** Language of the empty chat screen and its conversation starters. */
+  preferred_language: Language;
 }
 
 export interface Conversation {
@@ -141,6 +147,8 @@ export const api = {
     create: () => request<Conversation>(`${BASE}/chat/conversations`, { method: 'POST' }),
     delete: (id: string) => request<{ ok: boolean }>(`${BASE}/chat/conversations/${id}`, { method: 'DELETE' }),
     messages: (id: string) => request<Message[]>(`${BASE}/chat/conversations/${id}/messages`),
+    /** A fresh random few on every call. */
+    starters: () => request<{ language: Language; questions: string[] }>(`${BASE}/chat/starters`),
     sendMessage: (id: string, content: string, image?: File, attachment?: File) => {
       const form = new FormData();
       form.append('content', content);
@@ -185,6 +193,13 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled }),
       }),
+    starters: () => request<ConversationStarters>(`${BASE}/admin/starters`),
+    saveStarters: (language: Language, questions: string[]) =>
+      request<ConversationStarters>(`${BASE}/admin/starters/${language}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questions }),
+      }),
     createUser: (email: string, name?: string) =>
       request<AdminUser>(`${BASE}/admin/users`, {
         method: 'POST',
@@ -192,7 +207,7 @@ export const api = {
         body: JSON.stringify({ email, name }),
       }),
     user: (id: string) => request<AdminUser>(`${BASE}/admin/users/${id}`),
-    updateConfig: (id: string, config: { model?: string; model_provider?: string; user_data?: string; is_admin?: boolean }) =>
+    updateConfig: (id: string, config: { model?: string; model_provider?: string; user_data?: string; preferred_language?: Language; is_admin?: boolean }) =>
       request<{ ok: boolean }>(`${BASE}/admin/users/${id}/config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

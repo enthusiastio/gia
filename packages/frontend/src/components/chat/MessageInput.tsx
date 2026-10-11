@@ -155,7 +155,7 @@ export function MessageInput({ onSend, disabled }: MessageInputProps) {
               <img src={imagePreview} alt="Preview" className="h-20 rounded-xl object-contain border border-border" />
               <button
                 onClick={removeImage}
-                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-surface-2 border border-border rounded-full flex items-center justify-center text-text-muted hover:text-red-400"
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-surface-2 border border-border rounded-full flex items-center justify-center text-text-muted hover:text-red-600"
               >
                 <X size={10} />
               </button>
@@ -172,7 +172,7 @@ export function MessageInput({ onSend, disabled }: MessageInputProps) {
             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-surface-2 border border-border rounded-lg text-xs text-text-muted">
               <Paperclip size={11} />
               <span className="max-w-[200px] truncate">{attachment.name}</span>
-              <button onClick={removeAttachment} className="hover:text-red-400 ml-0.5">
+              <button onClick={removeAttachment} className="hover:text-red-600 ml-0.5">
                 <X size={10} />
               </button>
             </div>
@@ -181,14 +181,14 @@ export function MessageInput({ onSend, disabled }: MessageInputProps) {
       </AnimatePresence>
 
       <div className={cn(
-        'flex items-end gap-2 bg-surface-2 border rounded-2xl px-3 py-2 transition-[border-color,box-shadow] duration-200',
-        'border-border focus-within:border-primary/50 focus-within:shadow-[0_0_0_4px_rgba(124,109,245,0.12)]'
+        'flex items-end gap-2 bg-surface border rounded-2xl shadow-sm px-3 py-2 transition-[border-color,box-shadow] duration-200',
+        'border-border focus-within:border-primary/50 focus-within:shadow-[0_0_0_4px_rgba(0,166,207,0.15)]'
       )}>
         {/* Gallery */}
         <button
           onClick={() => fileRef.current?.click()}
           disabled={disabled}
-          className="flex-shrink-0 p-1.5 text-text-muted hover:text-primary transition-colors disabled:opacity-40 mb-0.5"
+          className="flex-shrink-0 p-1.5 text-text-muted hover:text-primary-dark transition-colors disabled:opacity-40 mb-0.5"
           title="Attach image from gallery"
         >
           <ImagePlus size={18} />
@@ -198,7 +198,7 @@ export function MessageInput({ onSend, disabled }: MessageInputProps) {
         <button
           onClick={() => cameraRef.current?.click()}
           disabled={disabled}
-          className="flex-shrink-0 p-1.5 text-text-muted hover:text-primary transition-colors disabled:opacity-40 mb-0.5"
+          className="flex-shrink-0 p-1.5 text-text-muted hover:text-primary-dark transition-colors disabled:opacity-40 mb-0.5"
           title="Take a photo"
         >
           <Camera size={18} />
@@ -208,7 +208,7 @@ export function MessageInput({ onSend, disabled }: MessageInputProps) {
         <button
           onClick={handleDrivePick}
           disabled={disabled || driveLoading}
-          className="flex-shrink-0 p-1.5 text-text-muted hover:text-primary transition-colors disabled:opacity-40 mb-0.5"
+          className="flex-shrink-0 p-1.5 text-text-muted hover:text-primary-dark transition-colors disabled:opacity-40 mb-0.5"
           title="Attach file from Google Drive"
         >
           {driveLoading ? (
@@ -248,7 +248,7 @@ export function MessageInput({ onSend, disabled }: MessageInputProps) {
           disabled={!canSend}
           className={cn(
             'flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-150 mb-0.5',
-            canSend ? 'bg-primary text-white hover:bg-primary-hover active:scale-90' : 'bg-surface text-text-dim cursor-not-allowed'
+            canSend ? 'bg-primary-dark text-white hover:bg-primary-hover active:scale-90' : 'bg-surface-2 text-text-dim cursor-not-allowed'
           )}
           aria-label="Send message"
         >

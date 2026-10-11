@@ -12,8 +12,8 @@
     height: 100%;
     margin: 0;
     padding: 0;
-    background-color: #0a0a0f;
-    color: #f0f0f5;
+    background-color: #f2f8fb;
+    color: #0f4f6a;
     font-family: 'IBM Plex Sans', system-ui, sans-serif;
   }
 
@@ -25,8 +25,10 @@
   /* Custom scrollbar */
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #2a2a38; border-radius: 2px; }
-  ::-webkit-scrollbar-thumb:hover { background: #3a3a48; }
+  ::-webkit-scrollbar-thumb { background: #cfe0e7; border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: #a9c5d1; }
+
+  ::selection { background: rgba(0, 166, 207, 0.3); color: #0f4f6a; }
 }
 
 @layer utilities {

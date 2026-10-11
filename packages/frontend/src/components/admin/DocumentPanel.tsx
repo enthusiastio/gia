@@ -11,10 +11,10 @@ const POLL_MS = 2500;
 
 function StatusPill({ file }: { file: UserFile }) {
   const map = {
-    pending: { label: 'Queued', cls: 'bg-amber-500/10 text-amber-400', icon: Loader2, spin: false },
-    processing: { label: 'Indexing', cls: 'bg-blue-500/10 text-blue-400', icon: Loader2, spin: true },
-    ready: { label: `${file.chunk_count} chunks`, cls: 'bg-emerald-500/10 text-emerald-400', icon: Check, spin: false },
-    failed: { label: 'Failed', cls: 'bg-red-500/10 text-red-400', icon: AlertCircle, spin: false },
+    pending: { label: 'Queued', cls: 'bg-nexus-light/50 text-nexus-dark', icon: Loader2, spin: false },
+    processing: { label: 'Indexing', cls: 'bg-genesis-light/50 text-genesis-dark', icon: Loader2, spin: true },
+    ready: { label: `${file.chunk_count} chunks`, cls: 'bg-biohack-light/60 text-biohack-dark', icon: Check, spin: false },
+    failed: { label: 'Failed', cls: 'bg-red-500/10 text-red-600', icon: AlertCircle, spin: false },
   }[file.status];
   const Icon = map.icon;
 
@@ -123,7 +123,7 @@ function DocumentRow({ file, busy, onDelete, onDownload, onReingest, onUpdate }:
           </p>
 
           {file.status === 'failed' && file.error && (
-            <p className="text-xs text-red-400 mt-1.5 leading-relaxed">{file.error}</p>
+            <p className="text-xs text-red-600 mt-1.5 leading-relaxed">{file.error}</p>
           )}
 
           {editing ? (
@@ -215,7 +215,7 @@ function DocumentRow({ file, busy, onDelete, onDownload, onReingest, onUpdate }:
             onClick={() => onDelete(file.id)}
             disabled={busy}
             title="Delete document"
-            className="text-text-dim hover:text-red-400 disabled:opacity-30 transition-colors p-1.5"
+            className="text-text-dim hover:text-red-600 disabled:opacity-30 transition-colors p-1.5"
           >
             <Trash2 size={13} />
           </button>
@@ -344,7 +344,7 @@ export function DocumentPanel({ userId }: { userId: string }) {
       </p>
 
       {error && (
-        <div className="flex items-start gap-2 mb-3 px-3 py-2 rounded-xl bg-red-500/10 text-red-400">
+        <div className="flex items-start gap-2 mb-3 px-3 py-2 rounded-xl bg-red-500/10 text-red-600">
           <AlertCircle size={13} className="mt-0.5 flex-shrink-0" />
           <p className="text-xs leading-relaxed">{error}</p>
         </div>
@@ -360,7 +360,7 @@ export function DocumentPanel({ userId }: { userId: string }) {
               dragging ? 'border-primary bg-primary/10' : 'border-border/70 hover:bg-surface-2'
             )}
           >
-            <Upload size={16} className={cn('mx-auto mb-2', dragging ? 'text-primary' : 'text-text-dim')} />
+            <Upload size={16} className={cn('mx-auto mb-2', dragging ? 'text-primary-dark' : 'text-text-dim')} />
             <p className="text-sm text-text-muted">{dragging ? 'Drop to upload' : 'No documents yet'}</p>
             <p className="text-xs text-text-dim mt-0.5">Drop files here or click to upload</p>
           </button>

@@ -87,7 +87,7 @@ export function ModelSelectionPanel({ settings, onSaved }: ModelSelectionPanelPr
             <span className="relative inline-flex items-center gap-1.5">
               {t.label}
               {settings.api_keys[t.id].source === 'none' && (
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" title="No API key" />
+                <span className="w-1.5 h-1.5 rounded-full bg-accent" title="No API key" />
               )}
             </span>
           </button>
@@ -125,7 +125,7 @@ export function ModelSelectionPanel({ settings, onSaved }: ModelSelectionPanelPr
                 <button
                   onClick={() => run(() => api.admin.removeApiKey(tab))}
                   disabled={busy}
-                  className="text-text-muted underline hover:text-red-400 disabled:opacity-40"
+                  className="text-text-muted underline hover:text-red-600 disabled:opacity-40"
                 >
                   Remove it
                 </button>{' '}
@@ -133,7 +133,7 @@ export function ModelSelectionPanel({ settings, onSaved }: ModelSelectionPanelPr
               </>
             )}
             {status.source === 'env' && <>Using the key from the server's .env, ending in {status.last4}. Paste a key to replace it.</>}
-            {status.source === 'none' && <span className="text-amber-400">No key yet. Chats on these models fail until you add one.</span>}
+            {status.source === 'none' && <span className="text-nexus-dark">No key yet. Chats on these models fail until you add one.</span>}
             {tab === 'openai' && ' This key also indexes uploaded documents, whichever chat model a user has.'}
           </p>
         </div>
@@ -157,7 +157,7 @@ export function ModelSelectionPanel({ settings, onSaved }: ModelSelectionPanelPr
           </div>
         </div>
 
-        {error && <p className="text-xs text-red-400">{error}</p>}
+        {error && <p className="text-xs text-red-600">{error}</p>}
       </div>
     </div>
   );

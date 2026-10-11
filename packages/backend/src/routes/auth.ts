@@ -116,7 +116,7 @@ router.get(
 router.get("/me", requireAuth, async (req: Request, res: Response) => {
   const [user] = await knex("users")
     .where({ id: req.user!.id })
-    .select("id", "email", "name", "avatar_url", "is_admin");
+    .select("id", "email", "name", "avatar_url", "is_admin", "preferred_language");
   res.json(user);
 });
 

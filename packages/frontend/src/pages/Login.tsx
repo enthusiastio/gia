@@ -24,7 +24,7 @@ export default function Login() {
         {/* Logo */}
         <div className="flex items-center gap-3 mb-10 justify-center">
           <div className="w-10 h-10 rounded-2xl bg-primary/20 flex items-center justify-center">
-            <Dna size={20} className="text-primary" />
+            <Dna size={20} className="text-primary-dark" />
           </div>
           <div>
             <p className="text-xs text-text-muted tracking-widest uppercase">SOLUT·IA LAB</p>
@@ -40,7 +40,7 @@ export default function Login() {
           </p>
 
           {error && (
-            <p role="alert" className="text-sm text-red-400 bg-red-500/10 rounded-xl px-3 py-2.5 -mt-4 mb-6 leading-relaxed">
+            <p role="alert" className="text-sm text-red-600 bg-red-500/10 rounded-xl px-3 py-2.5 -mt-4 mb-6 leading-relaxed">
               {error}
             </p>
           )}

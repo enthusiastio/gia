@@ -145,3 +145,67 @@ export async function setEnabledModels(ids: string[]): Promise<string[]> {
   await writeSetting('enabled_models', JSON.stringify(clean));
   return clean;
 }
+
+export const LANGUAGES = ['en', 'es'] as const;
+export type Language = (typeof LANGUAGES)[number];
+
+export function isLanguage(value: unknown): value is Language {
+  return LANGUAGES.includes(value as Language);
+}
+
+export type ConversationStarters = Record<Language, string[]>;
+
+/** What each language offers until an admin saves a list of their own. */
+const DEFAULT_STARTERS: ConversationStarters = {
+  en: [
+    'What should I eat for breakfast?',
+    'Summarise my latest blood test',
+    'Which supplements are in my protocol?',
+  ],
+  es: [
+    '¿Qué debería desayunar?',
+    'Resume mi último análisis de sangre',
+    '¿Qué suplementos hay en mi protocolo?',
+  ],
+};
+
+const MAX_STARTER_LENGTH = 200;
+const startersSetting = (language: Language) => `conversation_starters_${language}`;
+
+async function readStarters(language: Language): Promise<string[]> {
+  const stored = await readSetting(startersSetting(language));
+  if (!stored) return DEFAULT_STARTERS[language];
+  try {
+    const questions = JSON.parse(stored);
+    return Array.isArray(questions) ? questions.filter((q) => typeof q === 'string') : DEFAULT_STARTERS[language];
+  } catch {
+    return DEFAULT_STARTERS[language];
+  }
+}
+
+/** The questions offered on the empty chat screen, per language. */
+export async function getConversationStarters(): Promise<ConversationStarters> {
+  const lists = await Promise.all(LANGUAGES.map(async (l) => [l, await readStarters(l)] as const));
+  return Object.fromEntries(lists) as ConversationStarters;
+}
+
+/** Replaces a language's list. Blank and repeated rows are dropped. */
+export async function saveConversationStarters(language: Language, questions: string[]): Promise<void> {
+  const clean = [...new Set(questions.map((q) => q.trim().slice(0, MAX_STARTER_LENGTH)).filter(Boolean))];
+  // '[]' rather than null: null would bring the built-in defaults back.
+  await writeSetting(startersSetting(language), JSON.stringify(clean));
+}
+
+/**
+ * A random few for one user's empty chat screen. A language with no
+ * questions borrows the English ones rather than showing nothing.
+ */
+export async function pickConversationStarters(language: Language, count = 3): Promise<string[]> {
+  const starters = await getConversationStarters();
+  const pool = [...(starters[language].length > 0 ? starters[language] : starters.en)];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, count);
+}

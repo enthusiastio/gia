@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, Plus, Save, SlidersHorizontal, Trash2, Users } from 'lucide-react';
-import { api, AdminUser, GeneralSettings } from '@/lib/api';
+import { ArrowLeft, MessagesSquare, Plus, Save, SlidersHorizontal, Trash2, Users } from 'lucide-react';
+import { api, AdminUser, GeneralSettings, Language } from '@/lib/api';
 import { DocumentPanel } from '@/components/admin/DocumentPanel';
 import { GeneralPanel } from '@/components/admin/GeneralPanel';
 import { ModelSelect } from '@/components/admin/ModelSelect';
+import { StartersPanel } from '@/components/admin/StartersPanel';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -12,12 +13,13 @@ export default function Admin() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [selected, setSelected] = useState<AdminUser | null>(null);
-  const [view, setView] = useState<'general' | 'user' | null>(null);
+  const [view, setView] = useState<'general' | 'starters' | 'user' | null>(null);
   const [settings, setSettings] = useState<GeneralSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [model, setModel] = useState('');
   const [modelProvider, setModelProvider] = useState('');
   const [userData, setUserData] = useState('');
+  const [language, setLanguage] = useState<Language>('en');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -37,6 +39,11 @@ export default function Admin() {
     setSelected(null);
   };
 
+  const openStarters = () => {
+    setView('starters');
+    setSelected(null);
+  };
+
   const selectUser = async (u: AdminUser) => {
     const detail = await api.admin.user(u.id);
     setSelected(detail);
@@ -44,6 +51,7 @@ export default function Admin() {
     setModel(detail.model ?? '');
     setModelProvider(detail.model_provider ?? '');
     setUserData(detail.user_data ?? '');
+    setLanguage(detail.preferred_language ?? 'en');
     setConfirmingDelete(false);
     setDeleteError(null);
   };
@@ -88,7 +96,12 @@ export default function Admin() {
   const handleSave = async () => {
     if (!selected) return;
     setSaving(true);
-    await api.admin.updateConfig(selected.id, { model, model_provider: modelProvider, user_data: userData.trim() });
+    await api.admin.updateConfig(selected.id, {
+      model,
+      model_provider: modelProvider,
+      user_data: userData.trim(),
+      preferred_language: language,
+    });
     setSaving(false);
     const updated = await api.admin.users();
     setUsers(updated);
@@ -122,6 +135,21 @@ export default function Admin() {
             </div>
           </button>
 
+          <button
+            onClick={openStarters}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+              view === 'starters' ? 'bg-primary/10 border-primary/40' : 'bg-surface border-border hover:bg-surface-2'
+            }`}
+          >
+            <MessagesSquare size={15} className="text-text-muted flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-text-primary">Conversation starters</p>
+              <p className="text-xs text-text-dim truncate">
+                Questions on the empty chat screen
+              </p>
+            </div>
+          </button>
+
           <div className="bg-surface border border-border rounded-2xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
               <Users size={15} className="text-text-muted" />
@@ -141,7 +169,7 @@ export default function Admin() {
                     {u.avatar_url ? (
                       <img src={u.avatar_url} alt={u.name} className="w-8 h-8 rounded-full flex-shrink-0" />
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs text-primary font-medium flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs text-primary-dark font-medium flex-shrink-0">
                         {u.name[0]}
                       </div>
                     )}
@@ -153,9 +181,9 @@ export default function Admin() {
                   <div className="flex gap-3 mt-1.5 pl-11 text-xs text-text-dim">
                     {u.has_signed_in
                       ? <span>{u.conversation_count} convs</span>
-                      : <span className="text-amber-400">not signed in yet</span>}
-                    {u.is_admin && <span className="text-primary">admin</span>}
-                    {u.model && <span className="text-accent truncate">{u.model}</span>}
+                      : <span className="text-nexus-dark">not signed in yet</span>}
+                    {u.is_admin && <span className="text-primary-dark">admin</span>}
+                    {u.model && <span className="text-nexus-dark truncate">{u.model}</span>}
                   </div>
                 </motion.button>
               ))}
@@ -188,7 +216,7 @@ export default function Admin() {
                   placeholder="Name (optional)"
                   className="w-full bg-surface-2 border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-primary placeholder-text-dim outline-none focus:border-primary/50"
                 />
-                {addError && <p className="text-xs text-red-400">{addError}</p>}
+                {addError && <p className="text-xs text-red-600">{addError}</p>}
                 <p className="text-[11px] text-text-dim leading-relaxed">
                   They can sign in once added. Documents you upload now will be waiting for them.
                 </p>
@@ -221,6 +249,8 @@ export default function Admin() {
         {/* General settings or user detail */}
         {view === 'general' && settings ? (
           <GeneralPanel settings={settings} onSaved={setSettings} />
+        ) : view === 'starters' ? (
+          <StartersPanel />
         ) : selected ? (
           <motion.div
             key={selected.id}
@@ -235,7 +265,7 @@ export default function Admin() {
               </h2>
 
               {!selected.has_signed_in && (
-                <p className="text-xs text-amber-400 bg-amber-500/10 rounded-xl px-3 py-2 -mt-2 mb-4 leading-relaxed">
+                <p className="text-xs text-nexus-dark bg-nexus-light/50 rounded-xl px-3 py-2 -mt-2 mb-4 leading-relaxed">
                   Not signed in yet. When they sign in with Google as {selected.email}, this
                   configuration and their documents become theirs.
                 </p>
@@ -250,6 +280,22 @@ export default function Admin() {
                     onChange={(m, p) => { setModel(m); setModelProvider(p); }}
                     defaultLabel={`Default (${settings?.default_model ?? settings?.server_default_model ?? 'General'})`}
                   />
+                </div>
+
+                <div>
+                  <label htmlFor="user-language" className="block text-xs text-text-muted mb-1.5">Preferred language</label>
+                  <select
+                    id="user-language"
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value as Language)}
+                    className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary outline-none focus:border-primary/50 transition-colors"
+                  >
+                    <option value="en">English</option>
+                    <option value="es">Spanish</option>
+                  </select>
+                  <p className="text-[11px] text-text-dim mt-1">
+                    Sets the language of their conversation starters. It is not sent to the assistant.
+                  </p>
                 </div>
 
                 <div>
@@ -287,7 +333,7 @@ export default function Admin() {
                 </p>
 
                 {deleteError && (
-                  <p className="text-xs text-red-400 mb-3">{deleteError}</p>
+                  <p className="text-xs text-red-600 mb-3">{deleteError}</p>
                 )}
 
                 {confirmingDelete ? (
@@ -311,7 +357,7 @@ export default function Admin() {
           </motion.div>
         ) : (
           <div className="flex items-center justify-center text-text-dim text-sm bg-surface border border-border rounded-2xl">
-            Choose General to set the defaults, or a user to manage their own settings
+            Choose General or Conversation starters, or a user to manage their own settings
           </div>
         )}
       </div>

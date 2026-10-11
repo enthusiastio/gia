@@ -9,7 +9,11 @@ const pdfParse: (
 import { requireAuth } from "../middleware/auth";
 import knex, { insertRow } from "../db/knex";
 import { getAIProvider } from "../services/ai";
-import { resolveUserAIConfig } from "../services/settings";
+import {
+  isLanguage,
+  pickConversationStarters,
+  resolveUserAIConfig,
+} from "../services/settings";
 import { ChatMessage } from "../services/ai/types";
 import { createLogger } from "../logger";
 import { v4 as uuidv4 } from "uuid";
@@ -130,6 +134,17 @@ async function extractAttachmentText(
   }
   return null;
 }
+
+/** Three questions for the empty chat screen, in the user's preferred language. */
+router.get("/starters", async (req: Request, res: Response) => {
+  const user = await knex("users")
+    .where({ id: req.user!.id })
+    .first("preferred_language");
+  const language = isLanguage(user?.preferred_language)
+    ? user.preferred_language
+    : "en";
+  res.json({ language, questions: await pickConversationStarters(language) });
+});
 
 router.get("/conversations", async (req: Request, res: Response) => {
   const conversations = await knex("conversations")
