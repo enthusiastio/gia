@@ -58,7 +58,7 @@ async function generalSettingsResponse() {
   };
 }
 
-/** General: the defaults for every user without their own model or prompt. */
+/** General: the prompt every user runs on, and the model for those without their own. */
 router.get('/settings', async (_req: Request, res: Response) => {
   res.json(await generalSettingsResponse());
 });
@@ -135,7 +135,7 @@ router.get('/users', async (_req: Request, res: Response) => {
     .select(
       'users.id', 'users.email', 'users.name', 'users.avatar_url',
       'users.is_admin', 'users.created_at', 'users.google_id',
-      'user_configs.model', 'user_configs.model_provider', 'user_configs.system_prompt'
+      'user_configs.model', 'user_configs.model_provider', 'user_configs.user_data'
     )
     // Oldest first, so a newly added user appears at the bottom, right where
     // the admin panel's "Add user" control sits.
@@ -154,7 +154,7 @@ router.get('/users/:id', async (req: Request, res: Response) => {
   const [user] = await knex('users')
     .leftJoin('user_configs', 'users.id', 'user_configs.user_id')
     .where('users.id', req.params.id)
-    .select('users.*', 'user_configs.model', 'user_configs.model_provider', 'user_configs.system_prompt');
+    .select('users.*', 'user_configs.model', 'user_configs.model_provider', 'user_configs.user_data');
   if (!user) { res.status(404).json({ error: 'Not found' }); return; }
 
   const files = await listUserDocuments(String(req.params.id));
@@ -163,7 +163,9 @@ router.get('/users/:id', async (req: Request, res: Response) => {
 });
 
 router.put('/users/:id/config', async (req: Request, res: Response) => {
-  const { model, model_provider, system_prompt, is_admin } = req.body;
+  const { model, model_provider, is_admin } = req.body;
+  // Left out of the request means leave as is; empty means clear.
+  const user_data = req.body.user_data === undefined ? undefined : String(req.body.user_data ?? '').trim() || null;
 
   if (is_admin !== undefined) {
     await knex('users').where({ id: req.params.id }).update({ is_admin: Boolean(is_admin) });
@@ -171,9 +173,9 @@ router.put('/users/:id/config', async (req: Request, res: Response) => {
 
   const [existing] = await knex('user_configs').where({ user_id: req.params.id });
   if (existing) {
-    await knex('user_configs').where({ user_id: req.params.id }).update({ model, model_provider, system_prompt, updated_at: knex.fn.now() });
+    await knex('user_configs').where({ user_id: req.params.id }).update({ model, model_provider, user_data, updated_at: knex.fn.now() });
   } else {
-    await knex('user_configs').insert({ user_id: req.params.id, model, model_provider, system_prompt });
+    await knex('user_configs').insert({ user_id: req.params.id, model, model_provider, user_data });
   }
   res.json({ ok: true });
 });

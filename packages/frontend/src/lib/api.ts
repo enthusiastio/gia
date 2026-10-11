@@ -122,7 +122,8 @@ export type GeneralDefaults = Pick<GeneralSettings, 'default_model' | 'default_m
 export interface AdminUser extends User {
   model: string | null;
   model_provider: string | null;
-  system_prompt: string | null;
+  /** Free-text details about the person, added to the default system prompt. */
+  user_data: string | null;
   conversation_count: number;
   /** False until the person first signs in with Google. */
   has_signed_in: boolean;
@@ -191,7 +192,7 @@ export const api = {
         body: JSON.stringify({ email, name }),
       }),
     user: (id: string) => request<AdminUser>(`${BASE}/admin/users/${id}`),
-    updateConfig: (id: string, config: { model?: string; model_provider?: string; system_prompt?: string; is_admin?: boolean }) =>
+    updateConfig: (id: string, config: { model?: string; model_provider?: string; user_data?: string; is_admin?: boolean }) =>
       request<{ ok: boolean }>(`${BASE}/admin/users/${id}/config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

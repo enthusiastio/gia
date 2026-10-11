@@ -7,6 +7,7 @@
     "packages/backend"
   ],
   "scripts": {
+    "predev": "docker compose up -d --wait",
     "dev": "concurrently \"npm run dev -w packages/backend\" \"npm run dev -w packages/frontend\"",
     "build": "npm run build -w packages/backend && npm run build -w packages/frontend",
     "postinstall": "if [ \"$NODE_ENV\" = \"production\" ]; then npm run build; fi"

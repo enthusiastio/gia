@@ -11,7 +11,7 @@ interface GeneralPanelProps {
   onSaved: (settings: GeneralSettings) => void;
 }
 
-/** Defaults for every user who has no model or prompt of their own. */
+/** The prompt every user runs on, and the model for those without their own. */
 export function GeneralPanel({ settings, onSaved }: GeneralPanelProps) {
   const [model, setModel] = useState(settings.default_model ?? '');
   const [provider, setProvider] = useState(settings.default_model_provider ?? '');
@@ -52,7 +52,7 @@ export function GeneralPanel({ settings, onSaved }: GeneralPanelProps) {
       <div className="bg-surface border border-border rounded-2xl p-5">
         <h2 className="text-sm font-semibold text-text-primary mb-1">General</h2>
         <p className="text-xs text-text-dim mb-4 leading-relaxed">
-          Defaults for every user. A model or prompt set on a user's own page takes their place.
+          The system prompt applies to every user. A model set on a user's own page takes the default model's place.
         </p>
 
         <div className="space-y-4">

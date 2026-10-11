@@ -41,10 +41,18 @@ export interface UserAIConfig {
   systemPrompt: string;
 }
 
+/** The default prompt followed by what the admin recorded about this user, if anything. */
+function withUserData(prompt: string, userData: string | null | undefined): string {
+  const data = userData?.trim();
+  if (!data) return prompt;
+  return `${prompt}\n\n--- ABOUT THIS USER ---\n${data}\n--- END ABOUT THIS USER ---`;
+}
+
 /**
- * What a user's chat and document indexing run on: their own settings first,
- * then General, then the server's .env. Model and provider are taken as a
- * pair from the same level, so a model never runs against the wrong provider.
+ * What a user's chat and document indexing run on. Model: their own setting
+ * first, then General, then the server's .env; model and provider are taken
+ * as a pair from the same level, so a model never runs against the wrong
+ * provider. Prompt: always the one from General, plus this user's data.
  */
 export async function resolveUserAIConfig(userId: string): Promise<UserAIConfig> {
   const [config] = await knex('user_configs').where({ user_id: userId });
@@ -59,7 +67,7 @@ export async function resolveUserAIConfig(userId: string): Promise<UserAIConfig>
   return {
     model,
     provider,
-    systemPrompt: config?.system_prompt?.trim() || general.default_system_prompt?.trim() || FALLBACK_SYSTEM_PROMPT,
+    systemPrompt: withUserData(general.default_system_prompt?.trim() || FALLBACK_SYSTEM_PROMPT, config?.user_data),
   };
 }
 
