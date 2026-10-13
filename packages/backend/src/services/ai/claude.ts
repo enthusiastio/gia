@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getApiKey } from '../settings';
-import { ChatProvider, ChatUsage, MAX_TOOL_ROUNDS } from './types';
+import { ChatProvider, emptyUsage, MAX_TOOL_ROUNDS } from './types';
 
 // One client per key: a key saved under General replaces the old one at once.
 let cached: { key: string; client: Anthropic } | null = null;
@@ -11,7 +11,25 @@ async function getClient(): Promise<Anthropic> {
   return cached.client;
 }
 
-export const claudeChat: ChatProvider = async ({ model, systemPrompt, messages, tools, runTool }) => {
+/**
+ * A copy of the conversation with a cache breakpoint at its end. Each tool
+ * round resends everything before it, and so does the user's next message;
+ * with the breakpoint those reads come from the cache.
+ */
+function withCacheBreakpoint(conversation: Anthropic.MessageParam[]): Anthropic.MessageParam[] {
+  const last = conversation[conversation.length - 1];
+  const blocks: Anthropic.ContentBlockParam[] =
+    typeof last.content === 'string' ? [{ type: 'text', text: last.content }] : [...last.content];
+  const tail = blocks[blocks.length - 1];
+  // Thinking blocks take no breakpoint and an empty text block is rejected
+  // with one; such a call simply goes without.
+  if (!tail || tail.type === 'thinking' || tail.type === 'redacted_thinking') return conversation;
+  if (tail.type === 'text' && !tail.text.trim()) return conversation;
+  blocks[blocks.length - 1] = { ...tail, cache_control: { type: 'ephemeral' } };
+  return [...conversation.slice(0, -1), { ...last, content: blocks }];
+}
+
+export const claudeChat: ChatProvider = async ({ model, systemPrompt, messages, tools, runTool, oneOff }) => {
   const formattedMessages: Anthropic.MessageParam[] = messages.map((m) => {
     if (m.role === 'user' && m.imageBase64 && m.imageMimeType) {
       return {
@@ -43,21 +61,22 @@ export const claudeChat: ChatProvider = async ({ model, systemPrompt, messages, 
   // Text since the last tool round. Anything said before a tool call is
   // preamble ("let me check your records"), not part of the answer.
   let answer = '';
-  const usage: ChatUsage = { inputTokens: 0, outputTokens: 0, webSearches: 0 };
+  const usage = emptyUsage();
   for (let round = 0; ; round++) {
     const forceAnswer = round >= MAX_TOOL_ROUNDS && customTools.length > 0;
     const response = await client.messages.create({
       model,
       max_tokens: 4096,
-      system: systemPrompt,
+      // Tools and system prompt are the same on every call for this user, so
+      // they are cached: later calls read them at a tenth of the input price.
+      system: oneOff ? systemPrompt : [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       tools: [{ type: 'web_search_20250305', name: 'web_search' }, ...customTools],
       ...(forceAnswer ? { tool_choice: { type: 'none' as const } } : {}),
-      messages: conversation,
+      messages: oneOff ? conversation : withCacheBreakpoint(conversation),
     });
-    usage.inputTokens +=
-      response.usage.input_tokens +
-      (response.usage.cache_creation_input_tokens ?? 0) +
-      (response.usage.cache_read_input_tokens ?? 0);
+    usage.inputTokens += response.usage.input_tokens;
+    usage.cacheReadTokens += response.usage.cache_read_input_tokens ?? 0;
+    usage.cacheWriteTokens += response.usage.cache_creation_input_tokens ?? 0;
     usage.outputTokens += response.usage.output_tokens;
     usage.webSearches += response.usage.server_tool_use?.web_search_requests ?? 0;
 

@@ -22,14 +22,30 @@ export interface ChatRequest {
   messages: ChatMessage[];
   tools?: ToolSpec[];
   runTool?: ToolRunner;
+  /**
+   * A call nothing will follow up on. Providers that charge for writing to
+   * their prompt cache skip it, since nothing would ever read it back.
+   */
+  oneOff?: boolean;
 }
 
 /** What one reply consumed, summed over every model call it took. */
 export interface ChatUsage {
+  /** Input billed at the full rate: cached input is counted below instead. */
   inputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   outputTokens: number;
   webSearches: number;
 }
+
+export const emptyUsage = (): ChatUsage => ({
+  inputTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+  outputTokens: 0,
+  webSearches: 0,
+});
 
 export interface ChatReply {
   text: string;

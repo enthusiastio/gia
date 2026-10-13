@@ -57,6 +57,7 @@ async function describe(userId: string, originalName: string, text: string): Pro
 
   const { text: reply, usage } = await chat({
     model,
+    oneOff: true,
     systemPrompt:
       'You catalogue personal health documents for a retrieval index. ' +
       'Respond with a single JSON object and nothing else: ' +

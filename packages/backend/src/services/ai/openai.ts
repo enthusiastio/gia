@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { getApiKey } from '../settings';
-import { ChatProvider, ChatUsage, MAX_TOOL_ROUNDS } from './types';
+import { ChatProvider, emptyUsage, MAX_TOOL_ROUNDS } from './types';
 
 // One client per key: a key saved under General replaces the old one at once.
 let cached: { key: string; client: OpenAI } | null = null;
@@ -46,9 +46,12 @@ export const openaiChat: ChatProvider = async ({ model, systemPrompt, messages, 
     input,
   });
 
-  const usage: ChatUsage = { inputTokens: 0, outputTokens: 0, webSearches: 0 };
+  const usage = emptyUsage();
   for (let round = 1; ; round++) {
-    usage.inputTokens += response.usage?.input_tokens ?? 0;
+    // OpenAI caches long prompts on its own and reports the cached share of the input.
+    const cached = response.usage?.input_tokens_details?.cached_tokens ?? 0;
+    usage.inputTokens += (response.usage?.input_tokens ?? 0) - cached;
+    usage.cacheReadTokens += cached;
     usage.outputTokens += response.usage?.output_tokens ?? 0;
     usage.webSearches += response.output.filter((o) => o.type === 'web_search_call').length;
 

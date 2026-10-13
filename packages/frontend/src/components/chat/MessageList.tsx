@@ -19,12 +19,14 @@ interface MessageListProps {
 
 const EMPTY_STATE_COPY: Record<Language, { greeting: (firstName: string) => string; hint: string }> = {
   en: {
-    greeting: (firstName) => (firstName ? `Hi ${firstName}, what would you like to know?` : 'What would you like to know?'),
-    hint: 'Ask about your reports, or send a photo of a menu or a food label.',
+    greeting: (firstName) =>
+      `${firstName ? `Hi ${firstName}` : 'Hi'}, I am GIA, your Genomic Intelligence Advisor.`,
+    hint: 'I’m here to help you understand your results and guide you on how to apply them in your daily life. You can ask me anytime you need.',
   },
   es: {
-    greeting: (firstName) => (firstName ? `Hola ${firstName}, ¿qué te gustaría saber?` : '¿Qué te gustaría saber?'),
-    hint: 'Pregunta sobre tus informes, o envía una foto de un menú o de una etiqueta de alimentos.',
+    greeting: (firstName) =>
+      `${firstName ? `Hola ${firstName}` : 'Hola'}, soy GIA, tu Asesora de Inteligencia Genómica.`,
+    hint: 'Estoy aquí para ayudarte a entender tus resultados y guiarte en cómo aplicarlos en tu día a día. Puedes preguntarme siempre que lo necesites.',
   },
 };
 

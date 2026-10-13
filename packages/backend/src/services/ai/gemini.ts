@@ -1,6 +1,6 @@
 import { FunctionDeclarationSchema, FunctionResponsePart, GenerateContentResult, GoogleGenerativeAI, Part, Tool } from '@google/generative-ai';
 import { getApiKey } from '../settings';
-import { ChatProvider, ChatUsage, MAX_TOOL_ROUNDS } from './types';
+import { ChatProvider, emptyUsage, MAX_TOOL_ROUNDS } from './types';
 
 async function getClient(): Promise<GoogleGenerativeAI> {
   const key = await getApiKey('gemini');
@@ -48,10 +48,12 @@ export const geminiChat: ChatProvider = async ({ model, systemPrompt, messages, 
   parts.push({ text: last.content || 'What do you see in this image?' });
 
   const chat = genModel.startChat({ history });
-  const usage: ChatUsage = { inputTokens: 0, outputTokens: 0, webSearches: 0 };
+  const usage = emptyUsage();
   const count = ({ response }: GenerateContentResult) => {
     const meta = response.usageMetadata;
-    usage.inputTokens += meta?.promptTokenCount ?? 0;
+    const cached = meta?.cachedContentTokenCount ?? 0;
+    usage.inputTokens += (meta?.promptTokenCount ?? 0) - cached;
+    usage.cacheReadTokens += cached;
     // Total minus prompt rather than candidatesTokenCount: thinking tokens are
     // billed as output but reported outside the candidates.
     usage.outputTokens += meta ? Math.max(meta.totalTokenCount - meta.promptTokenCount, 0) : 0;

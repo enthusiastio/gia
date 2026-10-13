@@ -1,6 +1,6 @@
 import knex from '../db/knex';
 import { logger } from '../logger';
-import { MODEL_CATALOG, ProviderId, WEB_SEARCH_PRICE } from './ai/models';
+import { CACHE_WRITE_MULTIPLIER, MODEL_CATALOG, ProviderId, WEB_SEARCH_PRICE } from './ai/models';
 import { ChatUsage } from './ai/types';
 import { getGeneralSettings } from './settings';
 
@@ -15,13 +15,18 @@ export const DEFAULT_MONTHLY_LIMIT_USD = 10;
 const FALLBACK_PRICE = {
   provider: 'claude' as ProviderId,
   inputPrice: Math.max(...MODEL_CATALOG.map((m) => m.inputPrice)),
+  cachedInputPrice: Math.max(...MODEL_CATALOG.map((m) => m.cachedInputPrice)),
   outputPrice: Math.max(...MODEL_CATALOG.map((m) => m.outputPrice)),
 };
 
 export function costOf(model: string, usage: ChatUsage): number {
   const price = MODEL_CATALOG.find((m) => m.id === model) ?? FALLBACK_PRICE;
   return (
-    (usage.inputTokens * price.inputPrice + usage.outputTokens * price.outputPrice) / 1_000_000 +
+    (usage.inputTokens * price.inputPrice +
+      usage.cacheReadTokens * price.cachedInputPrice +
+      usage.cacheWriteTokens * price.inputPrice * CACHE_WRITE_MULTIPLIER +
+      usage.outputTokens * price.outputPrice) /
+      1_000_000 +
     (usage.webSearches * WEB_SEARCH_PRICE[price.provider]) / 1000
   );
 }
@@ -45,6 +50,8 @@ export async function recordUsage({ userId, conversationId, kind, provider, mode
       provider: provider ?? MODEL_CATALOG.find((m) => m.id === model)?.provider ?? 'claude',
       model,
       input_tokens: usage.inputTokens,
+      cache_read_tokens: usage.cacheReadTokens,
+      cache_write_tokens: usage.cacheWriteTokens,
       output_tokens: usage.outputTokens,
       web_searches: usage.webSearches,
       cost_usd: costOf(model, usage).toFixed(6),
