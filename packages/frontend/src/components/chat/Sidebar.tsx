@@ -9,12 +9,102 @@ import {
   LogOut,
   ChevronRight,
 } from "lucide-react";
-import { Conversation, User } from "@/lib/api";
+import { Conversation, UsageStatus, UsageWindow, User } from "@/lib/api";
 import { formatRelativeTime, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 
+/** "in 5h", "in 12 days": how long until an allowance is full again. */
+function formatReset(resetsAt: string): string {
+  const minutes = Math.max(Math.ceil((new Date(resetsAt).getTime() - Date.now()) / 60000), 1);
+  if (minutes < 60) return `in ${minutes}m`;
+  const hours = Math.ceil(minutes / 60);
+  if (hours < 24) return `in ${hours}h`;
+  const days = Math.ceil(hours / 24);
+  return `in ${days} day${days === 1 ? "" : "s"}`;
+}
+
+function UsageBar({ label, window }: { label: string; window: UsageWindow }) {
+  const percent = Math.round(window.used * 100);
+  return (
+    <div title={`Resets ${formatReset(window.resets_at)}`}>
+      <div className="flex items-baseline justify-between text-[11px] text-text-muted">
+        <span>{label}</span>
+        <span className={cn(percent >= 100 && "text-red-600 font-medium")}>
+          {percent >= 100 ? `Resets ${formatReset(window.resets_at)}` : `${percent}% used`}
+        </span>
+      </div>
+      <div
+        role="progressbar"
+        aria-label={`${label} usage`}
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        className="mt-1 h-1 rounded-full bg-primary/15 overflow-hidden"
+      >
+        <div
+          className={cn(
+            "h-full rounded-full transition-[width] duration-500",
+            percent >= 100 ? "bg-red-600" : percent >= 80 ? "bg-accent" : "bg-primary-dark",
+          )}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A thin line along the bottom of the sidebar, filled to whichever allowance
+ * is closer to running out. Clicking it slides the details up.
+ */
+function UsageMeter({ usage }: { usage: UsageStatus }) {
+  const [open, setOpen] = useState(false);
+  const percent = Math.round(Math.max(usage.daily.used, usage.monthly.used) * 100);
+
+  return (
+    <div>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="overflow-hidden"
+          >
+            <div className="px-6 pt-1 pb-2 space-y-2">
+              <UsageBar label="Today" window={usage.daily} />
+              <UsageBar label="This month" window={usage.monthly} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* The padding is click area only: the line itself stays 3px. */}
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-label={`Usage: ${percent}% used. ${open ? "Hide" : "Show"} details`}
+        title="Usage"
+        className="block w-full pt-2 group"
+      >
+        <div className="h-[3px] bg-primary/15 group-hover:bg-primary/25 transition-colors">
+          <div
+            className={cn(
+              "h-full transition-[width] duration-500",
+              percent >= 100 ? "bg-red-600" : percent >= 80 ? "bg-accent" : "bg-primary-dark",
+            )}
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      </button>
+    </div>
+  );
+}
+
 interface SidebarProps {
   user: User;
+  /** null until the first load; the meter simply is not drawn yet. */
+  usage: UsageStatus | null;
   conversations: Conversation[];
   activeId: string | null;
   onSelect: (id: string) => void;
@@ -27,6 +117,7 @@ interface SidebarProps {
 
 export function Sidebar({
   user,
+  usage,
   conversations,
   activeId,
   onSelect,
@@ -155,6 +246,8 @@ export function Sidebar({
           </button>
         </div>
       </div>
+
+      {usage && <UsageMeter usage={usage} />}
     </div>
   );
 

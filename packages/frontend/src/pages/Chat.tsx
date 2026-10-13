@@ -5,7 +5,7 @@ import { Sidebar } from "@/components/chat/Sidebar";
 import { MessageList } from "@/components/chat/MessageList";
 import { MessageInput } from "@/components/chat/MessageInput";
 import { useAuth } from "@/hooks/useAuth";
-import { api, Conversation, Message } from "@/lib/api";
+import { api, ApiError, Conversation, Message, UsageStatus } from "@/lib/api";
 import { useNavigate } from "react-router-dom";
 
 export default function Chat() {
@@ -18,6 +18,11 @@ export default function Chat() {
   const [aiLoading, setAiLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [starters, setStarters] = useState<string[]>([]);
+  const [usage, setUsage] = useState<UsageStatus | null>(null);
+
+  const refreshUsage = useCallback(() => {
+    api.conversations.usage().then(setUsage).catch(console.error);
+  }, []);
 
   // A new random few each time the empty screen comes up.
   const refreshStarters = useCallback(() => {
@@ -30,7 +35,8 @@ export default function Chat() {
   useEffect(() => {
     api.conversations.list().then(setConversations).catch(console.error);
     refreshStarters();
-  }, [refreshStarters]);
+    refreshUsage();
+  }, [refreshStarters, refreshUsage]);
 
   const loadConversation = useCallback(async (id: string) => {
     setActiveId(id);
@@ -101,7 +107,12 @@ export default function Chat() {
         {
           id: `err-${Date.now()}`,
           role: "assistant",
-          content: `No answer came back: ${err instanceof Error ? err.message : String(err)}. Your message is back in the box below, so you can send it again.`,
+          // 429 is the usage limit: its message stands on its own, and sending
+          // again would not help.
+          content:
+            err instanceof ApiError && err.status === 429
+              ? err.message
+              : `No answer came back: ${err instanceof Error ? err.message : String(err)}. Your message is back in the box below, so you can send it again.`,
           image_path: null,
           created_at: new Date().toISOString(),
         },
@@ -110,6 +121,7 @@ export default function Chat() {
       throw err;
     } finally {
       setAiLoading(false);
+      refreshUsage();
     }
   };
 
@@ -125,6 +137,7 @@ export default function Chat() {
     <div className="flex h-screen bg-background overflow-hidden">
       <Sidebar
         user={user}
+        usage={usage}
         conversations={conversations}
         activeId={activeId}
         onSelect={loadConversation}

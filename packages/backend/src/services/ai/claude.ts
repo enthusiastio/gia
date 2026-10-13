@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getApiKey } from '../settings';
-import { ChatProvider, MAX_TOOL_ROUNDS } from './types';
+import { ChatProvider, ChatUsage, MAX_TOOL_ROUNDS } from './types';
 
 // One client per key: a key saved under General replaces the old one at once.
 let cached: { key: string; client: Anthropic } | null = null;
@@ -43,6 +43,7 @@ export const claudeChat: ChatProvider = async ({ model, systemPrompt, messages, 
   // Text since the last tool round. Anything said before a tool call is
   // preamble ("let me check your records"), not part of the answer.
   let answer = '';
+  const usage: ChatUsage = { inputTokens: 0, outputTokens: 0, webSearches: 0 };
   for (let round = 0; ; round++) {
     const forceAnswer = round >= MAX_TOOL_ROUNDS && customTools.length > 0;
     const response = await client.messages.create({
@@ -53,6 +54,12 @@ export const claudeChat: ChatProvider = async ({ model, systemPrompt, messages, 
       ...(forceAnswer ? { tool_choice: { type: 'none' as const } } : {}),
       messages: conversation,
     });
+    usage.inputTokens +=
+      response.usage.input_tokens +
+      (response.usage.cache_creation_input_tokens ?? 0) +
+      (response.usage.cache_read_input_tokens ?? 0);
+    usage.outputTokens += response.usage.output_tokens;
+    usage.webSearches += response.usage.server_tool_use?.web_search_requests ?? 0;
 
     // Concatenate every text block: with web_search enabled the model routinely
     // emits several, and keeping only the last one discards the body of the
@@ -72,7 +79,7 @@ export const claudeChat: ChatProvider = async ({ model, systemPrompt, messages, 
 
     const calls = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
     if (response.stop_reason !== 'tool_use' || calls.length === 0 || !runTool) {
-      return answer.trim();
+      return { text: answer.trim(), usage };
     }
 
     const results: Anthropic.ToolResultBlockParam[] = [];

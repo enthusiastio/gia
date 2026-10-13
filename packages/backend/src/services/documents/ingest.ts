@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import knex from '../../db/knex';
 import { getAIProvider } from '../ai';
 import { resolveUserAIConfig } from '../settings';
+import { recordUsage } from '../usage';
 import { createLogger, logger } from '../../logger';
 import { chunkMarkdown, embeddableText } from './chunker';
 import { embedTexts, toVectorLiteral } from './embeddings';
@@ -54,7 +55,7 @@ async function describe(userId: string, originalName: string, text: string): Pro
   const { model, provider } = await resolveUserAIConfig(userId);
   const chat = getAIProvider(provider);
 
-  const reply = await chat({
+  const { text: reply, usage } = await chat({
     model,
     systemPrompt:
       'You catalogue personal health documents for a retrieval index. ' +
@@ -77,6 +78,7 @@ async function describe(userId: string, originalName: string, text: string): Pro
       },
     ],
   });
+  await recordUsage({ userId, kind: 'ingest', provider, model, usage });
 
   try {
     const match = /\{[\s\S]*\}/.exec(reply);

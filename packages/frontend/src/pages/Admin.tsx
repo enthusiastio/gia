@@ -6,6 +6,7 @@ import { DocumentPanel } from '@/components/admin/DocumentPanel';
 import { GeneralPanel } from '@/components/admin/GeneralPanel';
 import { ModelSelect } from '@/components/admin/ModelSelect';
 import { StartersPanel } from '@/components/admin/StartersPanel';
+import { UsagePanel } from '@/components/admin/UsagePanel';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -319,6 +320,8 @@ export default function Admin() {
                 </Button>
               </div>
             </div>
+
+            <UsagePanel userId={selected.id} />
 
             <DocumentPanel userId={selected.id} />
 

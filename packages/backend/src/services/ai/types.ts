@@ -24,7 +24,19 @@ export interface ChatRequest {
   runTool?: ToolRunner;
 }
 
-export type ChatProvider = (req: ChatRequest) => Promise<string>;
+/** What one reply consumed, summed over every model call it took. */
+export interface ChatUsage {
+  inputTokens: number;
+  outputTokens: number;
+  webSearches: number;
+}
+
+export interface ChatReply {
+  text: string;
+  usage: ChatUsage;
+}
+
+export type ChatProvider = (req: ChatRequest) => Promise<ChatReply>;
 
 /**
  * Model calls allowed to end in tool use before the next one is forced to

@@ -29,6 +29,12 @@ import {
   setEnabledModels,
 } from '../services/settings';
 import { isProvider, MODEL_CATALOG, PROVIDERS } from '../services/ai/models';
+import {
+  DEFAULT_DAILY_LIMIT_USD,
+  DEFAULT_MONTHLY_LIMIT_USD,
+  getUsageSpending,
+  resetUsage,
+} from '../services/usage';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -56,6 +62,8 @@ async function generalSettingsResponse() {
   return {
     ...(await getGeneralSettings()),
     server_default_model: SERVER_DEFAULT_MODEL,
+    default_daily_limit_usd: DEFAULT_DAILY_LIMIT_USD,
+    default_monthly_limit_usd: DEFAULT_MONTHLY_LIMIT_USD,
     api_keys: Object.fromEntries(keys),
     models: MODEL_CATALOG.map((m) => ({ ...m, enabled: enabled.has(m.id) })),
   };
@@ -67,8 +75,15 @@ router.get('/settings', async (_req: Request, res: Response) => {
 });
 
 router.put('/settings', async (req: Request, res: Response) => {
-  const { default_model, default_model_provider, default_system_prompt } = req.body;
-  await saveGeneralSettings({ default_model, default_model_provider, default_system_prompt });
+  const { default_model, default_model_provider, default_system_prompt, daily_limit_usd, monthly_limit_usd } = req.body;
+  for (const limit of [daily_limit_usd, monthly_limit_usd]) {
+    // Empty clears the limit back to the built-in default.
+    if (limit !== undefined && limit !== null && limit !== '' && !(Number(limit) > 0)) {
+      res.status(400).json({ error: 'A usage limit must be an amount above zero' });
+      return;
+    }
+  }
+  await saveGeneralSettings({ default_model, default_model_provider, default_system_prompt, daily_limit_usd, monthly_limit_usd });
   res.json(await generalSettingsResponse());
 });
 
@@ -202,6 +217,22 @@ router.put('/users/:id/config', async (req: Request, res: Response) => {
     await knex('user_configs').insert({ user_id: req.params.id, model, model_provider, user_data });
   }
   res.json({ ok: true });
+});
+
+/** What the user has spent against their limits, in money. */
+router.get('/users/:id/usage', async (req: Request, res: Response) => {
+  res.json(await getUsageSpending(String(req.params.id)));
+});
+
+/** Wipes the counted spending of today, or of the month, so the user can chat again. */
+router.post('/users/:id/usage/reset', async (req: Request, res: Response) => {
+  const { window } = req.body;
+  if (window !== 'daily' && window !== 'monthly') {
+    res.status(400).json({ error: '"window" must be "daily" or "monthly"' });
+    return;
+  }
+  await resetUsage(String(req.params.id), window);
+  res.json(await getUsageSpending(String(req.params.id)));
 });
 
 router.delete('/users/:id', async (req: Request, res: Response) => {

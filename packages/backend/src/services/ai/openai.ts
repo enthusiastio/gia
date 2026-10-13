@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { getApiKey } from '../settings';
-import { ChatProvider, MAX_TOOL_ROUNDS } from './types';
+import { ChatProvider, ChatUsage, MAX_TOOL_ROUNDS } from './types';
 
 // One client per key: a key saved under General replaces the old one at once.
 let cached: { key: string; client: OpenAI } | null = null;
@@ -46,11 +46,16 @@ export const openaiChat: ChatProvider = async ({ model, systemPrompt, messages, 
     input,
   });
 
+  const usage: ChatUsage = { inputTokens: 0, outputTokens: 0, webSearches: 0 };
   for (let round = 1; ; round++) {
+    usage.inputTokens += response.usage?.input_tokens ?? 0;
+    usage.outputTokens += response.usage?.output_tokens ?? 0;
+    usage.webSearches += response.output.filter((o) => o.type === 'web_search_call').length;
+
     const calls = response.output.filter(
       (o): o is OpenAI.Responses.ResponseFunctionToolCall => o.type === 'function_call'
     );
-    if (calls.length === 0 || !runTool) return response.output_text;
+    if (calls.length === 0 || !runTool) return { text: response.output_text, usage };
 
     const outputs: OpenAI.Responses.ResponseInputItem[] = [];
     for (const call of calls) {

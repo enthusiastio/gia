@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -22,6 +22,7 @@ import {
   createDocumentTools,
   DocumentTools,
 } from "../services/documents/tools";
+import { getUsageStatus, recordUsage } from "../services/usage";
 
 const router = Router();
 router.use(requireAuth);
@@ -189,6 +190,11 @@ router.get(
   },
 );
 
+/** How much of the daily and monthly allowance the user has spent. */
+router.get("/usage", async (req: Request, res: Response) => {
+  res.json(await getUsageStatus(req.user!.id));
+});
+
 const uploadFields = upload.fields([
   { name: "image", maxCount: 1 },
   { name: "attachment", maxCount: 1 },
@@ -196,6 +202,23 @@ const uploadFields = upload.fields([
 
 router.post(
   "/conversations/:id/messages",
+  // Before the upload is accepted: a message that will not be answered should
+  // not be stored either. A reply that crosses the limit is still delivered;
+  // it is the next message that stops here.
+  async (req: Request, res: Response, next: NextFunction) => {
+    const usage = await getUsageStatus(req.user!.id);
+    if (usage.exhausted) {
+      res.status(429).json({
+        error:
+          usage.exhausted === "daily"
+            ? "You have used today's allowance. It resets at midnight UTC."
+            : "You have used this month's allowance. It resets on the first of next month.",
+        usage,
+      });
+      return;
+    }
+    next();
+  },
   (req, res, next) => {
     uploadFields(req, res, (err) => {
       if (err instanceof multer.MulterError) {
@@ -317,12 +340,20 @@ router.post(
 
     try {
       const aiChat = getAIProvider(modelProvider);
-      const reply = await aiChat({
+      const { text: reply, usage } = await aiChat({
         model,
         systemPrompt,
         messages: aiMessages,
         tools: documentTools?.specs,
         runTool: documentTools?.run,
+      });
+      await recordUsage({
+        userId: req.user!.id,
+        conversationId: conv.id,
+        kind: "chat",
+        provider: modelProvider,
+        model,
+        usage,
       });
       const sources = [...pinnedSources, ...(documentTools?.sources ?? [])];
       if (documentTools) {

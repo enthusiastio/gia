@@ -1,10 +1,17 @@
 const BASE = '/api';
 
+/** A failed request, with the HTTP status for callers that treat some differently. */
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { credentials: 'include', ...init });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? 'Request failed');
+    throw new ApiError(err.error ?? 'Request failed', res.status);
   }
   return res.json();
 }
@@ -70,6 +77,33 @@ export interface Message {
   created_at: string;
 }
 
+export interface UsageWindow {
+  /** Share of the allowance spent, 0 to 1. */
+  used: number;
+  resets_at: string;
+}
+
+export interface UsageStatus {
+  daily: UsageWindow;
+  monthly: UsageWindow;
+  /** The allowance that is blocking new messages, if any. */
+  exhausted: 'daily' | 'monthly' | null;
+}
+
+/** One limit as the admin sees it, in USD. */
+export interface UsageSpend {
+  spent: number;
+  limit: number;
+  resets_at: string;
+}
+
+export interface UsageSpending {
+  daily: UsageSpend;
+  monthly: UsageSpend;
+  /** Everything paid for this user this month: indexing and reset spending included. */
+  month_cost: number;
+}
+
 export type DocumentStatus = 'pending' | 'processing' | 'ready' | 'failed';
 
 export interface UserFile {
@@ -117,13 +151,21 @@ export interface GeneralSettings {
   default_model: string | null;
   default_model_provider: string | null;
   default_system_prompt: string | null;
+  /** What one user may spend on chat, in USD; null means the built-in default below. */
+  daily_limit_usd: string | null;
+  monthly_limit_usd: string | null;
+  default_daily_limit_usd: number;
+  default_monthly_limit_usd: number;
   /** DEFAULT_MODEL from the server's .env, used when no default model is set here. */
   server_default_model: string;
   api_keys: Record<ProviderId, ApiKeyStatus>;
   models: ModelOption[];
 }
 
-export type GeneralDefaults = Pick<GeneralSettings, 'default_model' | 'default_model_provider' | 'default_system_prompt'>;
+export type GeneralDefaults = Pick<
+  GeneralSettings,
+  'default_model' | 'default_model_provider' | 'default_system_prompt' | 'daily_limit_usd' | 'monthly_limit_usd'
+>;
 
 export interface AdminUser extends User {
   model: string | null;
@@ -149,6 +191,7 @@ export const api = {
     messages: (id: string) => request<Message[]>(`${BASE}/chat/conversations/${id}/messages`),
     /** A fresh random few on every call. */
     starters: () => request<{ language: Language; questions: string[] }>(`${BASE}/chat/starters`),
+    usage: () => request<UsageStatus>(`${BASE}/chat/usage`),
     sendMessage: (id: string, content: string, image?: File, attachment?: File) => {
       const form = new FormData();
       form.append('content', content);
@@ -212,6 +255,13 @@ export const api = {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
+      }),
+    usage: (id: string) => request<UsageSpending>(`${BASE}/admin/users/${id}/usage`),
+    resetUsage: (id: string, window: 'daily' | 'monthly') =>
+      request<UsageSpending>(`${BASE}/admin/users/${id}/usage/reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ window }),
       }),
     deleteUser: (id: string) =>
       request<{ ok: boolean }>(`${BASE}/admin/users/${id}`, { method: 'DELETE' }),

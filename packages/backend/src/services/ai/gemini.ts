@@ -1,6 +1,6 @@
-import { FunctionDeclarationSchema, FunctionResponsePart, GoogleGenerativeAI, Part, Tool } from '@google/generative-ai';
+import { FunctionDeclarationSchema, FunctionResponsePart, GenerateContentResult, GoogleGenerativeAI, Part, Tool } from '@google/generative-ai';
 import { getApiKey } from '../settings';
-import { ChatProvider, MAX_TOOL_ROUNDS } from './types';
+import { ChatProvider, ChatUsage, MAX_TOOL_ROUNDS } from './types';
 
 async function getClient(): Promise<GoogleGenerativeAI> {
   const key = await getApiKey('gemini');
@@ -48,11 +48,22 @@ export const geminiChat: ChatProvider = async ({ model, systemPrompt, messages, 
   parts.push({ text: last.content || 'What do you see in this image?' });
 
   const chat = genModel.startChat({ history });
+  const usage: ChatUsage = { inputTokens: 0, outputTokens: 0, webSearches: 0 };
+  const count = ({ response }: GenerateContentResult) => {
+    const meta = response.usageMetadata;
+    usage.inputTokens += meta?.promptTokenCount ?? 0;
+    // Total minus prompt rather than candidatesTokenCount: thinking tokens are
+    // billed as output but reported outside the candidates.
+    usage.outputTokens += meta ? Math.max(meta.totalTokenCount - meta.promptTokenCount, 0) : 0;
+    // Search grounding is billed per grounded prompt, however many queries it ran.
+    if (response.candidates?.[0]?.groundingMetadata?.webSearchQueries?.length) usage.webSearches += 1;
+  };
   let result = await chat.sendMessage(parts);
+  count(result);
 
   for (let round = 1; ; round++) {
     const calls = result.response.functionCalls();
-    if (!calls || calls.length === 0 || !runTool) return result.response.text();
+    if (!calls || calls.length === 0 || !runTool) return { text: result.response.text(), usage };
 
     // Tool choice is fixed per chat session here, so the last round answers
     // the calls with a request to stop instead of running them.
@@ -65,6 +76,7 @@ export const geminiChat: ChatProvider = async ({ model, systemPrompt, messages, 
       responses.push({ functionResponse: { name: call.name, response: { result: output } } });
     }
     result = await chat.sendMessage(responses);
-    if (exhausted) return result.response.text();
+    count(result);
+    if (exhausted) return { text: result.response.text(), usage };
   }
 };
