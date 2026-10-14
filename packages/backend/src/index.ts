@@ -70,7 +70,9 @@ async function main() {
   app.use("/api/chat", chatRouter);
   app.use("/api/files", filesRouter);
   app.use("/api/admin", adminRouter);
-  app.use("/api/uploads", express.static(uploadDir));
+  // Only chat images are public by URL. Documents (uploads/genetic) stay
+  // behind the authenticated admin download route.
+  app.use("/api/uploads/images", express.static(path.join(uploadDir, "images")));
 
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
 

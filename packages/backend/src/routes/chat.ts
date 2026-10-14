@@ -23,6 +23,7 @@ import {
   DocumentTools,
 } from "../services/documents/tools";
 import { getUsageStatus, recordUsage } from "../services/usage";
+import { documentFileFilter } from "../services/documents/fileTypes";
 
 const router = Router();
 router.use(requireAuth);
@@ -105,15 +106,35 @@ How to answer:
 `.trim();
 const maxSizeMB = parseInt(process.env.MAX_FILE_SIZE_MB ?? "50", 10);
 
+/**
+ * Uploads land under /api/uploads, which is served from the app's own origin,
+ * and the stored extension decides the Content-Type. Only known-safe
+ * extensions get through, or an uploaded .html or .svg would run as script
+ * for whoever opens its link.
+ */
+const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
+
 const imageStorage = multer.diskStorage({
   destination: path.join(uploadDir, "images"),
   filename: (_req, file, cb) =>
-    cb(null, `${uuidv4()}${path.extname(file.originalname)}`),
+    cb(null, `${uuidv4()}${path.extname(file.originalname).toLowerCase()}`),
 });
 
 const upload = multer({
   storage: imageStorage,
   limits: { fileSize: maxSizeMB * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.fieldname === "attachment") {
+      documentFileFilter!(req, file, cb);
+      return;
+    }
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (IMAGE_EXTENSIONS.includes(ext) && file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Unsupported image type "${ext || file.originalname}". Allowed: ${IMAGE_EXTENSIONS.join(", ")}`));
+    }
+  },
 });
 
 async function extractAttachmentText(
