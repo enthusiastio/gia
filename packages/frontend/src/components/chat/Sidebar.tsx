@@ -54,7 +54,7 @@ function UsageBar({ label, window }: { label: string; window: UsageWindow }) {
 }
 
 /**
- * A thin line along the bottom of the sidebar, filled to whichever allowance
+ * A labelled bar along the bottom of the sidebar, filled to whichever allowance
  * is closer to running out. Clicking it slides the details up.
  */
 function UsageMeter({ usage }: { usage: UsageStatus }) {
@@ -79,21 +79,25 @@ function UsageMeter({ usage }: { usage: UsageStatus }) {
           </motion.div>
         )}
       </AnimatePresence>
-      {/* The padding is click area only: the line itself stays 3px. */}
       <button
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-label={`Usage: ${percent}% used. ${open ? "Hide" : "Show"} details`}
         title="Usage"
-        className="block w-full pt-2 group"
+        className="block w-full px-6 pt-2 pb-3 group"
       >
-        <div className="h-[3px] bg-primary/15 group-hover:bg-primary/25 transition-colors">
+        <div className="flex items-baseline justify-between text-[11px] text-text-muted group-hover:text-text-primary transition-colors">
+          <span>Usage</span>
+          <span>{percent}%</span>
+        </div>
+        <div className="mt-1 h-1.5 rounded-full bg-primary/25 group-hover:bg-primary/35 overflow-hidden transition-colors">
           <div
             className={cn(
-              "h-full transition-[width] duration-500",
+              "h-full rounded-full transition-[width] duration-500",
               percent >= 100 ? "bg-red-600" : percent >= 80 ? "bg-accent" : "bg-primary-dark",
             )}
-            style={{ width: `${percent}%` }}
+            // A sliver even at 0-1%, so the bar never looks empty.
+            style={{ width: `${Math.max(percent, 2)}%` }}
           />
         </div>
       </button>

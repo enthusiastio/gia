@@ -104,10 +104,29 @@ function EmptyState({ userName, language, starters, onSuggest }: Omit<MessageLis
 
 export function MessageList({ messages, loading, userName, language, starters, onSuggest }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const lastReplyRef = useRef<HTMLDivElement>(null);
+  const lastIdRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages, loading]);
+    const last = messages[messages.length - 1];
+    const prevLastId = lastIdRef.current;
+    lastIdRef.current = last?.id;
+    if (!last || last.id === prevLastId) return;
+
+    if (prevLastId === undefined && messages.length > 1) {
+      // An existing conversation was opened: start at its end, no animation.
+      bottomRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
+    } else if (last.role === 'assistant') {
+      // Replies arrive whole, so show where the new one starts rather than its end.
+      lastReplyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    if (loading) bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [loading]);
 
   if (messages.length === 0 && !loading) {
     return <EmptyState userName={userName} language={language} starters={starters} onSuggest={onSuggest} />;
@@ -116,7 +135,7 @@ export function MessageList({ messages, loading, userName, language, starters, o
   return (
     <div className="flex-1 overflow-y-auto overflow-x-hidden">
       <div className="mx-auto w-full max-w-3xl px-4 py-6 space-y-6">
-        {messages.map((msg) =>
+        {messages.map((msg, i) =>
           msg.role === 'user' ? (
             // Rises out of the input box it was just typed into.
             <motion.div
@@ -137,10 +156,11 @@ export function MessageList({ messages, loading, userName, language, starters, o
           ) : (
             <motion.div
               key={msg.id}
+              ref={i === messages.length - 1 ? lastReplyRef : undefined}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, ease: 'easeOut' }}
-              className="flex gap-3"
+              className="flex gap-3 scroll-mt-4"
             >
               <GiaMark />
               <div className="min-w-0 flex-1 break-words">
