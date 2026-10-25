@@ -4,9 +4,8 @@ import { CACHE_WRITE_MULTIPLIER, MODEL_CATALOG, ProviderId, WEB_SEARCH_PRICE } f
 import { ChatUsage } from './ai/types';
 import { getGeneralSettings } from './settings';
 
-/** What a user may spend on chat when General sets no limit of its own. */
-export const DEFAULT_DAILY_LIMIT_USD = 1;
-export const DEFAULT_MONTHLY_LIMIT_USD = 10;
+/** What a user may spend on chat per year when General sets no limit of its own. */
+export const DEFAULT_ANNUAL_LIMIT_USD = 120;
 
 /**
  * Charged for a model missing from the catalogue (one named only in .env):
@@ -66,100 +65,112 @@ function parseLimit(value: string | null, fallback: number): number {
   return value !== null && Number.isFinite(limit) && limit > 0 ? limit : fallback;
 }
 
-/** One limit as the admin sees it, in money. */
-export interface UsageSpend {
-  spent: number;
-  limit: number;
-  resets_at: string;
-}
-
-export interface UsageSpending {
-  daily: UsageSpend;
-  monthly: UsageSpend;
-  /** Everything paid for this user this month: indexing and reset spending included. */
-  month_cost: number;
-}
-
-const later = (a: Date, b: Date | null) => (b && b > a ? b : a);
+const addYears = (date: Date, years: number) => {
+  const next = new Date(date);
+  next.setUTCFullYear(next.getUTCFullYear() + years);
+  return next;
+};
 
 /**
- * What a user has spent against both limits. Windows are calendar days and
- * months in UTC, so nothing has to run to reset them: a new window simply has
- * no spending in it yet. An admin's reset moves a window's start forward.
+ * The usage year a user is in now. Years repeat from their start date, so
+ * nothing has to run to renew them: a new year simply has no spending in it.
  */
-export async function getUsageSpending(userId: string): Promise<UsageSpending> {
-  const now = new Date();
-  const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+function currentPeriod(anchor: Date, now: Date): { start: Date; end: Date } {
+  let years = Math.max(now.getUTCFullYear() - anchor.getUTCFullYear(), 0);
+  if (addYears(anchor, years) > now) years = Math.max(years - 1, 0);
+  return { start: addYears(anchor, years), end: addYears(anchor, years + 1) };
+}
 
+export interface UsageTopup {
+  id: string;
+  amount_usd: number;
+  created_at: string;
+}
+
+/** The allowance as the admin sees it, in money. */
+export interface UsageSpending {
+  spent: number;
+  /** The base limit from General plus this year's top-ups. */
+  limit: number;
+  base_limit: number;
+  period_start: string;
+  resets_at: string;
+  /** Top-ups bought in this year; older ones no longer count. */
+  topups: UsageTopup[];
+  /** Everything paid for this user this year: document indexing included. */
+  period_cost: number;
+}
+
+/** What a user has spent this year against their allowance. */
+export async function getUsageSpending(userId: string): Promise<UsageSpending> {
   const [general, user] = await Promise.all([
     getGeneralSettings(),
-    knex('users').where({ id: userId }).first('usage_daily_reset_at', 'usage_monthly_reset_at'),
+    knex('users').where({ id: userId }).first('usage_period_start', 'created_at'),
   ]);
-  const countedSince = (start: Date) =>
-    knex.raw("COALESCE(SUM(CASE WHEN kind = 'chat' AND created_at >= ? THEN cost_usd ELSE 0 END), 0)", [start]);
-  const spent = (await knex('usage_events')
-    .where({ user_id: userId })
-    .where('created_at', '>=', monthStart)
-    .first(
-      knex.raw('COALESCE(SUM(cost_usd), 0) AS total'),
-      knex.raw('? AS month', [countedSince(later(monthStart, user?.usage_monthly_reset_at ?? null))]),
-      knex.raw('? AS day', [countedSince(later(dayStart, user?.usage_daily_reset_at ?? null))])
-    )) as unknown as { total: string; month: string; day: string };
+  const { start, end } = currentPeriod(new Date(user?.usage_period_start ?? user?.created_at ?? Date.now()), new Date());
 
+  const [spent, topups] = await Promise.all([
+    knex('usage_events')
+      .where({ user_id: userId })
+      .where('created_at', '>=', start)
+      .first(
+        knex.raw('COALESCE(SUM(cost_usd), 0) AS total'),
+        knex.raw("COALESCE(SUM(CASE WHEN kind = 'chat' THEN cost_usd ELSE 0 END), 0) AS chat")
+      ) as unknown as Promise<{ total: string; chat: string }>,
+    knex('usage_topups')
+      .where({ user_id: userId })
+      .where('created_at', '>=', start)
+      .orderBy('created_at', 'asc')
+      .select('id', 'amount_usd', 'created_at'),
+  ]);
+
+  const baseLimit = parseLimit(general.annual_limit_usd, DEFAULT_ANNUAL_LIMIT_USD);
+  const topupList: UsageTopup[] = topups.map((t) => ({
+    id: t.id,
+    amount_usd: Number(t.amount_usd),
+    created_at: new Date(t.created_at).toISOString(),
+  }));
   return {
-    daily: {
-      spent: Number(spent.day),
-      limit: parseLimit(general.daily_limit_usd, DEFAULT_DAILY_LIMIT_USD),
-      resets_at: new Date(dayStart.getTime() + 24 * 60 * 60 * 1000).toISOString(),
-    },
-    monthly: {
-      spent: Number(spent.month),
-      limit: parseLimit(general.monthly_limit_usd, DEFAULT_MONTHLY_LIMIT_USD),
-      resets_at: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString(),
-    },
-    month_cost: Number(spent.total),
+    spent: Number(spent.chat),
+    limit: baseLimit + topupList.reduce((sum, t) => sum + t.amount_usd, 0),
+    base_limit: baseLimit,
+    period_start: start.toISOString(),
+    resets_at: end.toISOString(),
+    topups: topupList,
+    period_cost: Number(spent.total),
   };
+}
+
+/** Adds to this year's allowance, for a user who paid for more. */
+export async function addTopup(userId: string, amountUsd: number): Promise<void> {
+  await knex('usage_topups').insert({ user_id: userId, amount_usd: amountUsd.toFixed(2) });
+}
+
+/** Takes back a top-up added by mistake. */
+export async function removeTopup(userId: string, topupId: string): Promise<boolean> {
+  return (await knex('usage_topups').where({ id: topupId, user_id: userId }).delete()) > 0;
 }
 
 /**
- * Lets a user who hit a limit talk again. Resetting the month resets the day
- * with it: a month's allowance is no use behind a spent daily one.
+ * Starts the user's year now, for when they pay for a new one. Spending and
+ * top-ups from before no longer count; the rows themselves stay.
  */
-export async function resetUsage(userId: string, window: 'daily' | 'monthly'): Promise<void> {
-  const now = knex.fn.now(6);
-  await knex('users')
-    .where({ id: userId })
-    .update(
-      window === 'monthly'
-        ? { usage_daily_reset_at: now, usage_monthly_reset_at: now }
-        : { usage_daily_reset_at: now }
-    );
+export async function startNewPeriod(userId: string): Promise<void> {
+  await knex('users').where({ id: userId }).update({ usage_period_start: knex.fn.now(6) });
 }
 
-export interface UsageWindow {
-  /** Share of the limit spent, 0 to 1. */
+/** Shares only: what the limit is in money is the operator's business. */
+export interface UsageStatus {
+  /** Share of the allowance spent, 0 to 1. */
   used: number;
   resets_at: string;
+  /** True once the allowance is spent and new messages are refused. */
+  exhausted: boolean;
 }
 
-/** Shares only: what the limits are in money is the operator's business. */
-export interface UsageStatus {
-  daily: UsageWindow;
-  monthly: UsageWindow;
-  /** The window that is blocking new messages, if any. */
-  exhausted: 'daily' | 'monthly' | null;
-}
-
-/** Where a user stands against both limits, as they are allowed to see it. */
+/** Where a user stands against their allowance, as they are allowed to see it. */
 export async function getUsageStatus(userId: string): Promise<UsageStatus> {
-  const { daily, monthly } = await getUsageSpending(userId);
-  const dailyUsed = daily.spent / daily.limit;
-  const monthlyUsed = monthly.spent / monthly.limit;
-  return {
-    daily: { used: Math.min(dailyUsed, 1), resets_at: daily.resets_at },
-    monthly: { used: Math.min(monthlyUsed, 1), resets_at: monthly.resets_at },
-    // Monthly first: when both are spent, it is the one the user waits for.
-    exhausted: monthlyUsed >= 1 ? 'monthly' : dailyUsed >= 1 ? 'daily' : null,
-  };
+  const { spent, limit, resets_at } = await getUsageSpending(userId);
+  const used = spent / limit;
+  return { used: Math.min(used, 1), resets_at, exhausted: used >= 1 };
 }

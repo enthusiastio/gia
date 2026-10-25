@@ -9,11 +9,11 @@ import {
   LogOut,
   ChevronRight,
 } from "lucide-react";
-import { Conversation, UsageStatus, UsageWindow, User } from "@/lib/api";
+import { Conversation, UsageStatus, User } from "@/lib/api";
 import { formatRelativeTime, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 
-/** "in 5h", "in 12 days": how long until an allowance is full again. */
+/** "in 5h", "in 12 days": how long until the allowance renews. */
 function formatReset(resetsAt: string): string {
   const minutes = Math.max(Math.ceil((new Date(resetsAt).getTime() - Date.now()) / 60000), 1);
   if (minutes < 60) return `in ${minutes}m`;
@@ -23,43 +23,13 @@ function formatReset(resetsAt: string): string {
   return `in ${days} day${days === 1 ? "" : "s"}`;
 }
 
-function UsageBar({ label, window }: { label: string; window: UsageWindow }) {
-  const percent = Math.round(window.used * 100);
-  return (
-    <div title={`Resets ${formatReset(window.resets_at)}`}>
-      <div className="flex items-baseline justify-between text-[11px] text-text-muted">
-        <span>{label}</span>
-        <span className={cn(percent >= 100 && "text-red-600 font-medium")}>
-          {percent >= 100 ? `Resets ${formatReset(window.resets_at)}` : `${percent}% used`}
-        </span>
-      </div>
-      <div
-        role="progressbar"
-        aria-label={`${label} usage`}
-        aria-valuenow={percent}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        className="mt-1 h-1 rounded-full bg-primary/15 overflow-hidden"
-      >
-        <div
-          className={cn(
-            "h-full rounded-full transition-[width] duration-500",
-            percent >= 100 ? "bg-red-600" : percent >= 80 ? "bg-accent" : "bg-primary-dark",
-          )}
-          style={{ width: `${percent}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 /**
- * A labelled bar along the bottom of the sidebar, filled to whichever allowance
- * is closer to running out. Clicking it slides the details up.
+ * A labelled bar along the bottom of the sidebar, filled to the share of this
+ * year's allowance spent. Clicking it slides up when the year renews.
  */
 function UsageMeter({ usage }: { usage: UsageStatus }) {
   const [open, setOpen] = useState(false);
-  const percent = Math.round(Math.max(usage.daily.used, usage.monthly.used) * 100);
+  const percent = Math.round(usage.used * 100);
 
   return (
     <div>
@@ -72,10 +42,11 @@ function UsageMeter({ usage }: { usage: UsageStatus }) {
             transition={{ duration: 0.2, ease: "easeOut" }}
             className="overflow-hidden"
           >
-            <div className="px-6 pt-1 pb-2 space-y-2">
-              <UsageBar label="Today" window={usage.daily} />
-              <UsageBar label="This month" window={usage.monthly} />
-            </div>
+            <p className={cn("px-6 pt-1 pb-1 text-[11px] text-text-muted", usage.exhausted && "text-red-600 font-medium")}>
+              {usage.exhausted
+                ? "This year's allowance is used up. Contact us to add more."
+                : `${percent}% of this year's allowance used. Renews ${formatReset(usage.resets_at)}.`}
+            </p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -87,10 +58,16 @@ function UsageMeter({ usage }: { usage: UsageStatus }) {
         className="block w-full px-6 pt-2 pb-3 group"
       >
         <div className="flex items-baseline justify-between text-[11px] text-text-muted group-hover:text-text-primary transition-colors">
-          <span>Usage</span>
+          <span>Usage this year</span>
           <span>{percent}%</span>
         </div>
-        <div className="mt-1 h-1.5 rounded-full bg-primary/25 group-hover:bg-primary/35 overflow-hidden transition-colors">
+        <div
+          role="progressbar"
+          aria-valuenow={percent}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          className="mt-1 h-1.5 rounded-full bg-primary/25 group-hover:bg-primary/35 overflow-hidden transition-colors"
+        >
           <div
             className={cn(
               "h-full rounded-full transition-[width] duration-500",

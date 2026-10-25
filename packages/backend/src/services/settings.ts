@@ -7,17 +7,15 @@ export interface GeneralSettings {
   default_model: string | null;
   default_model_provider: string | null;
   default_system_prompt: string | null;
-  /** What one user may spend on chat per day and per month; unset means the built-in default. */
-  daily_limit_usd: string | null;
-  monthly_limit_usd: string | null;
+  /** What one user may spend on chat per year; unset means the built-in default. */
+  annual_limit_usd: string | null;
 }
 
 const KEYS: (keyof GeneralSettings)[] = [
   'default_model',
   'default_model_provider',
   'default_system_prompt',
-  'daily_limit_usd',
-  'monthly_limit_usd',
+  'annual_limit_usd',
 ];
 
 /** Last resort when neither the user nor General names a model. */

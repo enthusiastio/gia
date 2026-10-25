@@ -16,8 +16,7 @@ export function GeneralPanel({ settings, onSaved }: GeneralPanelProps) {
   const [model, setModel] = useState(settings.default_model ?? '');
   const [provider, setProvider] = useState(settings.default_model_provider ?? '');
   const [prompt, setPrompt] = useState(settings.default_system_prompt ?? '');
-  const [dailyLimit, setDailyLimit] = useState(settings.daily_limit_usd ?? '');
-  const [monthlyLimit, setMonthlyLimit] = useState(settings.monthly_limit_usd ?? '');
+  const [annualLimit, setAnnualLimit] = useState(settings.annual_limit_usd ?? '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,14 +27,12 @@ export function GeneralPanel({ settings, onSaved }: GeneralPanelProps) {
     setModel(settings.default_model ?? '');
     setProvider(settings.default_model_provider ?? '');
     setPrompt(settings.default_system_prompt ?? '');
-    setDailyLimit(settings.daily_limit_usd ?? '');
-    setMonthlyLimit(settings.monthly_limit_usd ?? '');
+    setAnnualLimit(settings.annual_limit_usd ?? '');
   }, [
     settings.default_model,
     settings.default_model_provider,
     settings.default_system_prompt,
-    settings.daily_limit_usd,
-    settings.monthly_limit_usd,
+    settings.annual_limit_usd,
   ]);
 
   const save = async () => {
@@ -46,8 +43,7 @@ export function GeneralPanel({ settings, onSaved }: GeneralPanelProps) {
         default_model: model,
         default_model_provider: provider,
         default_system_prompt: prompt,
-        daily_limit_usd: dailyLimit,
-        monthly_limit_usd: monthlyLimit,
+        annual_limit_usd: annualLimit,
       });
       onSaved(next);
       setSaved(true);
@@ -90,28 +86,19 @@ export function GeneralPanel({ settings, onSaved }: GeneralPanelProps) {
           </div>
 
           <div>
-            <label className="block text-xs text-text-muted mb-1.5">Usage limit per user (USD of model cost)</label>
-            <div className="grid grid-cols-2 gap-3">
-              {([
-                ['Per day', dailyLimit, setDailyLimit, settings.default_daily_limit_usd],
-                ['Per month', monthlyLimit, setMonthlyLimit, settings.default_monthly_limit_usd],
-              ] as const).map(([label, value, setValue, fallback]) => (
-                <label key={label} className="block">
-                  <span className="block text-[11px] text-text-dim mb-1">{label}</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    placeholder={String(fallback)}
-                    className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-dim outline-none focus:border-primary/50 transition-colors"
-                  />
-                </label>
-              ))}
-            </div>
+            <label htmlFor="annual-limit" className="block text-xs text-text-muted mb-1.5">Usage limit per user per year (USD of model cost)</label>
+            <input
+              id="annual-limit"
+              type="number"
+              min="0"
+              step="1"
+              value={annualLimit}
+              onChange={(e) => setAnnualLimit(e.target.value)}
+              placeholder={String(settings.default_annual_limit_usd)}
+              className="w-full sm:w-48 bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-dim outline-none focus:border-primary/50 transition-colors"
+            />
             <p className="text-[11px] text-text-dim mt-1.5 leading-relaxed">
-              Chat stops answering a user who reaches either limit until it resets: daily at midnight UTC, monthly on the first. Users see how much is left as a percentage, never the amounts.
+              Each user's year runs from the day they were added, or from when you last started a new year on their page. Chat stops answering a user who spends their allowance until you add a top-up or the year renews. Users see how much is left as a percentage, never the amounts.
             </p>
           </div>
 

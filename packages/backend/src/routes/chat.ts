@@ -211,7 +211,7 @@ router.get(
   },
 );
 
-/** How much of the daily and monthly allowance the user has spent. */
+/** How much of this year's allowance the user has spent. */
 router.get("/usage", async (req: Request, res: Response) => {
   res.json(await getUsageStatus(req.user!.id));
 });
@@ -230,10 +230,7 @@ router.post(
     const usage = await getUsageStatus(req.user!.id);
     if (usage.exhausted) {
       res.status(429).json({
-        error:
-          usage.exhausted === "daily"
-            ? "You have used today's allowance. It resets at midnight UTC."
-            : "You have used this month's allowance. It resets on the first of next month.",
+        error: "You have used this year's allowance. Contact us to add more.",
         usage,
       });
       return;

@@ -118,7 +118,7 @@ export default function Admin() {
         <h1 className="text-sm font-semibold text-text-primary">Admin Panel</h1>
       </div>
 
-      <div className="max-w-5xl mx-auto p-4 md:p-6 grid md:grid-cols-[280px_1fr] gap-4">
+      <div className="max-w-5xl mx-auto p-4 md:p-6 grid md:grid-cols-[280px_minmax(0,1fr)] gap-4">
         {/* User list, with the add control where the new user will appear */}
         <div className="space-y-2 self-start">
           <button

@@ -30,10 +30,11 @@ import {
 } from '../services/settings';
 import { isProvider, MODEL_CATALOG, PROVIDERS } from '../services/ai/models';
 import {
-  DEFAULT_DAILY_LIMIT_USD,
-  DEFAULT_MONTHLY_LIMIT_USD,
+  addTopup,
+  DEFAULT_ANNUAL_LIMIT_USD,
   getUsageSpending,
-  resetUsage,
+  removeTopup,
+  startNewPeriod,
 } from '../services/usage';
 
 const router = Router();
@@ -62,8 +63,7 @@ async function generalSettingsResponse() {
   return {
     ...(await getGeneralSettings()),
     server_default_model: SERVER_DEFAULT_MODEL,
-    default_daily_limit_usd: DEFAULT_DAILY_LIMIT_USD,
-    default_monthly_limit_usd: DEFAULT_MONTHLY_LIMIT_USD,
+    default_annual_limit_usd: DEFAULT_ANNUAL_LIMIT_USD,
     api_keys: Object.fromEntries(keys),
     models: MODEL_CATALOG.map((m) => ({ ...m, enabled: enabled.has(m.id) })),
   };
@@ -75,15 +75,13 @@ router.get('/settings', async (_req: Request, res: Response) => {
 });
 
 router.put('/settings', async (req: Request, res: Response) => {
-  const { default_model, default_model_provider, default_system_prompt, daily_limit_usd, monthly_limit_usd } = req.body;
-  for (const limit of [daily_limit_usd, monthly_limit_usd]) {
-    // Empty clears the limit back to the built-in default.
-    if (limit !== undefined && limit !== null && limit !== '' && !(Number(limit) > 0)) {
-      res.status(400).json({ error: 'A usage limit must be an amount above zero' });
-      return;
-    }
+  const { default_model, default_model_provider, default_system_prompt, annual_limit_usd } = req.body;
+  // Empty clears the limit back to the built-in default.
+  if (annual_limit_usd !== undefined && annual_limit_usd !== null && annual_limit_usd !== '' && !(Number(annual_limit_usd) > 0)) {
+    res.status(400).json({ error: 'A usage limit must be an amount above zero' });
+    return;
   }
-  await saveGeneralSettings({ default_model, default_model_provider, default_system_prompt, daily_limit_usd, monthly_limit_usd });
+  await saveGeneralSettings({ default_model, default_model_provider, default_system_prompt, annual_limit_usd });
   res.json(await generalSettingsResponse());
 });
 
@@ -219,19 +217,31 @@ router.put('/users/:id/config', async (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
-/** What the user has spent against their limits, in money. */
+/** What the user has spent this year against their allowance, in money. */
 router.get('/users/:id/usage', async (req: Request, res: Response) => {
   res.json(await getUsageSpending(String(req.params.id)));
 });
 
-/** Wipes the counted spending of today, or of the month, so the user can chat again. */
-router.post('/users/:id/usage/reset', async (req: Request, res: Response) => {
-  const { window } = req.body;
-  if (window !== 'daily' && window !== 'monthly') {
-    res.status(400).json({ error: '"window" must be "daily" or "monthly"' });
+/** Adds to this year's allowance, for a user who paid for more. */
+router.post('/users/:id/usage/topups', async (req: Request, res: Response) => {
+  const amount = Number(req.body.amount_usd);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    res.status(400).json({ error: 'A top-up must be an amount above zero' });
     return;
   }
-  await resetUsage(String(req.params.id), window);
+  await addTopup(String(req.params.id), amount);
+  res.json(await getUsageSpending(String(req.params.id)));
+});
+
+router.delete('/users/:id/usage/topups/:topupId', async (req: Request, res: Response) => {
+  const removed = await removeTopup(String(req.params.id), String(req.params.topupId));
+  if (!removed) { res.status(404).json({ error: 'Not found' }); return; }
+  res.json(await getUsageSpending(String(req.params.id)));
+});
+
+/** Starts the user's year now, for when they pay for a new one. */
+router.post('/users/:id/usage/new-period', async (req: Request, res: Response) => {
+  await startNewPeriod(String(req.params.id));
   res.json(await getUsageSpending(String(req.params.id)));
 });
 

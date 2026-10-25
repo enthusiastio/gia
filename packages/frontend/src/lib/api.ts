@@ -77,31 +77,31 @@ export interface Message {
   created_at: string;
 }
 
-export interface UsageWindow {
-  /** Share of the allowance spent, 0 to 1. */
+export interface UsageStatus {
+  /** Share of this year's allowance spent, 0 to 1. */
   used: number;
   resets_at: string;
+  /** True once the allowance is spent and new messages are refused. */
+  exhausted: boolean;
 }
 
-export interface UsageStatus {
-  daily: UsageWindow;
-  monthly: UsageWindow;
-  /** The allowance that is blocking new messages, if any. */
-  exhausted: 'daily' | 'monthly' | null;
+export interface UsageTopup {
+  id: string;
+  amount_usd: number;
+  created_at: string;
 }
 
-/** One limit as the admin sees it, in USD. */
-export interface UsageSpend {
-  spent: number;
-  limit: number;
-  resets_at: string;
-}
-
+/** The annual allowance as the admin sees it, in USD. */
 export interface UsageSpending {
-  daily: UsageSpend;
-  monthly: UsageSpend;
-  /** Everything paid for this user this month: indexing and reset spending included. */
-  month_cost: number;
+  spent: number;
+  /** The base limit from General plus this year's top-ups. */
+  limit: number;
+  base_limit: number;
+  period_start: string;
+  resets_at: string;
+  topups: UsageTopup[];
+  /** Everything paid for this user this year: document indexing included. */
+  period_cost: number;
 }
 
 export type DocumentStatus = 'pending' | 'processing' | 'ready' | 'failed';
@@ -152,10 +152,8 @@ export interface GeneralSettings {
   default_model_provider: string | null;
   default_system_prompt: string | null;
   /** What one user may spend on chat, in USD; null means the built-in default below. */
-  daily_limit_usd: string | null;
-  monthly_limit_usd: string | null;
-  default_daily_limit_usd: number;
-  default_monthly_limit_usd: number;
+  annual_limit_usd: string | null;
+  default_annual_limit_usd: number;
   /** DEFAULT_MODEL from the server's .env, used when no default model is set here. */
   server_default_model: string;
   api_keys: Record<ProviderId, ApiKeyStatus>;
@@ -164,7 +162,7 @@ export interface GeneralSettings {
 
 export type GeneralDefaults = Pick<
   GeneralSettings,
-  'default_model' | 'default_model_provider' | 'default_system_prompt' | 'daily_limit_usd' | 'monthly_limit_usd'
+  'default_model' | 'default_model_provider' | 'default_system_prompt' | 'annual_limit_usd'
 >;
 
 export interface AdminUser extends User {
@@ -257,12 +255,16 @@ export const api = {
         body: JSON.stringify(config),
       }),
     usage: (id: string) => request<UsageSpending>(`${BASE}/admin/users/${id}/usage`),
-    resetUsage: (id: string, window: 'daily' | 'monthly') =>
-      request<UsageSpending>(`${BASE}/admin/users/${id}/usage/reset`, {
+    addTopup: (id: string, amountUsd: number) =>
+      request<UsageSpending>(`${BASE}/admin/users/${id}/usage/topups`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ window }),
+        body: JSON.stringify({ amount_usd: amountUsd }),
       }),
+    removeTopup: (id: string, topupId: string) =>
+      request<UsageSpending>(`${BASE}/admin/users/${id}/usage/topups/${topupId}`, { method: 'DELETE' }),
+    startNewPeriod: (id: string) =>
+      request<UsageSpending>(`${BASE}/admin/users/${id}/usage/new-period`, { method: 'POST' }),
     deleteUser: (id: string) =>
       request<{ ok: boolean }>(`${BASE}/admin/users/${id}`, { method: 'DELETE' }),
     uploadFile: (userId: string, file: File, meta: { title?: string; description?: string } = {}) => {
