@@ -1,12 +1,16 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Menu } from "lucide-react";
 import { MotionConfig } from "framer-motion";
 import { Sidebar } from "@/components/chat/Sidebar";
 import { MessageList } from "@/components/chat/MessageList";
 import { MessageInput } from "@/components/chat/MessageInput";
+import { UsageNotice } from "@/components/chat/UsageNotice";
 import { useAuth } from "@/hooks/useAuth";
 import { api, ApiError, Conversation, Message, UsageStatus } from "@/lib/api";
 import { useNavigate } from "react-router-dom";
+
+/** Shares of the allowance that earn a warning, highest first. */
+const USAGE_WARNINGS = [0.8, 0.5];
 
 export default function Chat() {
   const { user, logout } = useAuth();
@@ -19,9 +23,22 @@ export default function Chat() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [starters, setStarters] = useState<string[]>([]);
   const [usage, setUsage] = useState<UsageStatus | null>(null);
+  const [usageWarning, setUsageWarning] = useState<number | null>(null);
+  const usageRef = useRef<UsageStatus | null>(null);
 
+  // Only chat spends the allowance, so each warning comes once: on the reply
+  // that crosses it, compared with what was loaded before.
   const refreshUsage = useCallback(() => {
-    api.conversations.usage().then(setUsage).catch(console.error);
+    api.conversations
+      .usage()
+      .then((next) => {
+        const prev = usageRef.current;
+        usageRef.current = next;
+        setUsage(next);
+        const crossed = USAGE_WARNINGS.find((share) => prev && prev.used < share && next.used >= share);
+        if (crossed) setUsageWarning(crossed);
+      })
+      .catch(console.error);
   }, []);
 
   // A new random few each time the empty screen comes up.
@@ -172,6 +189,7 @@ export default function Chat() {
           starters={starters}
           onSuggest={(text) => handleSend(text).catch(() => {})}
         />
+        <UsageNotice usage={usage} warning={usageWarning} onDismiss={() => setUsageWarning(null)} />
         <MessageInput onSend={handleSend} disabled={aiLoading} />
       </div>
     </div>

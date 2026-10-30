@@ -78,12 +78,17 @@ export interface Message {
 }
 
 export interface UsageStatus {
-  /** Share of this year's allowance spent, 0 to 1. */
+  /** Share of this period's allowance spent, 0 to 1. */
   used: number;
-  resets_at: string;
+  ends_at: string;
   /** True once the allowance is spent and new messages are refused. */
   exhausted: boolean;
+  /** True once the plan has ended and new messages are refused. */
+  expired: boolean;
 }
+
+/** How long a plan runs, in months. */
+export type PlanMonths = 6 | 12;
 
 export interface UsageTopup {
   id: string;
@@ -91,16 +96,20 @@ export interface UsageTopup {
   created_at: string;
 }
 
-/** The annual allowance as the admin sees it, in USD. */
+/** The plan's allowance as the admin sees it, in USD. */
 export interface UsageSpending {
+  plan_months: PlanMonths;
   spent: number;
-  /** The base limit from General plus this year's top-ups. */
+  /** The base limit for the plan plus this period's top-ups. */
   limit: number;
+  /** The yearly limit from General, scaled to the plan's length. */
   base_limit: number;
   period_start: string;
-  resets_at: string;
+  /** When the plan ends. It does not renew by itself. */
+  ends_at: string;
+  expired: boolean;
   topups: UsageTopup[];
-  /** Everything paid for this user this year: document indexing included. */
+  /** Everything paid for this user this period: document indexing included. */
   period_cost: number;
 }
 
@@ -241,11 +250,11 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ questions }),
       }),
-    createUser: (email: string, name?: string) =>
+    createUser: (email: string, name: string | undefined, planMonths: PlanMonths) =>
       request<AdminUser>(`${BASE}/admin/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name }),
+        body: JSON.stringify({ email, name, plan_months: planMonths }),
       }),
     user: (id: string) => request<AdminUser>(`${BASE}/admin/users/${id}`),
     updateConfig: (id: string, config: { model?: string; model_provider?: string; user_data?: string; preferred_language?: Language; is_admin?: boolean }) =>
@@ -265,6 +274,12 @@ export const api = {
       request<UsageSpending>(`${BASE}/admin/users/${id}/usage/topups/${topupId}`, { method: 'DELETE' }),
     startNewPeriod: (id: string) =>
       request<UsageSpending>(`${BASE}/admin/users/${id}/usage/new-period`, { method: 'POST' }),
+    setPlan: (id: string, planMonths: PlanMonths) =>
+      request<UsageSpending>(`${BASE}/admin/users/${id}/usage/plan`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan_months: planMonths }),
+      }),
     deleteUser: (id: string) =>
       request<{ ok: boolean }>(`${BASE}/admin/users/${id}`, { method: 'DELETE' }),
     uploadFile: (userId: string, file: File, meta: { title?: string; description?: string } = {}) => {

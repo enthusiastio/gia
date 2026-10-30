@@ -33,7 +33,10 @@ import {
   addTopup,
   DEFAULT_ANNUAL_LIMIT_USD,
   getUsageSpending,
+  isPlanMonths,
+  PLAN_MONTHS,
   removeTopup,
+  setPlan,
   startNewPeriod,
 } from '../services/usage';
 
@@ -148,12 +151,19 @@ router.post('/users', async (req: Request, res: Response) => {
     return;
   }
 
+  const planMonths = req.body.plan_months ?? 12;
+  if (!isPlanMonths(planMonths)) {
+    res.status(400).json({ error: `A plan must be ${PLAN_MONTHS.join(' or ')} months` });
+    return;
+  }
+
   const name = String(req.body.name ?? '').trim() || email.split('@')[0];
   const user = await insertRow<{ google_id: string | null }>('users', {
     email,
     name,
     google_id: null,
     is_admin: false,
+    plan_months: planMonths,
   });
   res.status(201).json({ ...withSignInState(user), conversation_count: 0 });
 });
@@ -217,12 +227,12 @@ router.put('/users/:id/config', async (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
-/** What the user has spent this year against their allowance, in money. */
+/** What the user has spent this period against their allowance, in money. */
 router.get('/users/:id/usage', async (req: Request, res: Response) => {
   res.json(await getUsageSpending(String(req.params.id)));
 });
 
-/** Adds to this year's allowance, for a user who paid for more. */
+/** Adds to this period's allowance, for a user who paid for more. */
 router.post('/users/:id/usage/topups', async (req: Request, res: Response) => {
   const amount = Number(req.body.amount_usd);
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -239,9 +249,19 @@ router.delete('/users/:id/usage/topups/:topupId', async (req: Request, res: Resp
   res.json(await getUsageSpending(String(req.params.id)));
 });
 
-/** Starts the user's year now, for when they pay for a new one. */
+/** Starts the user's plan now, for when they pay for a new one. */
 router.post('/users/:id/usage/new-period', async (req: Request, res: Response) => {
   await startNewPeriod(String(req.params.id));
+  res.json(await getUsageSpending(String(req.params.id)));
+});
+
+router.put('/users/:id/usage/plan', async (req: Request, res: Response) => {
+  const planMonths = req.body.plan_months;
+  if (!isPlanMonths(planMonths)) {
+    res.status(400).json({ error: `A plan must be ${PLAN_MONTHS.join(' or ')} months` });
+    return;
+  }
+  await setPlan(String(req.params.id), planMonths);
   res.json(await getUsageSpending(String(req.params.id)));
 });
 

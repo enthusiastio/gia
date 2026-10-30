@@ -211,7 +211,7 @@ router.get(
   },
 );
 
-/** How much of this year's allowance the user has spent. */
+/** How much of this period's allowance the user has spent. */
 router.get("/usage", async (req: Request, res: Response) => {
   res.json(await getUsageStatus(req.user!.id));
 });
@@ -228,9 +228,11 @@ router.post(
   // it is the next message that stops here.
   async (req: Request, res: Response, next: NextFunction) => {
     const usage = await getUsageStatus(req.user!.id);
-    if (usage.exhausted) {
+    if (usage.expired || usage.exhausted) {
       res.status(429).json({
-        error: "You have used this year's allowance. Contact us to add more.",
+        error: usage.expired
+          ? "Your plan has ended. To keep using GIA, contact us to renew it."
+          : "You have used all of your plan's allowance. To keep asking questions, contact us to buy a top-up.",
         usage,
       });
       return;

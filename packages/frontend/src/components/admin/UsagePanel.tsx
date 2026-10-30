@@ -1,24 +1,24 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { CalendarPlus, Plus, X } from 'lucide-react';
-import { api, UsageSpending } from '@/lib/api';
+import { api, PlanMonths, UsageSpending } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 
 const usd = (amount: number) => `$${amount.toFixed(2)}`;
 const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 
-/** What a user has spent this year, and the top-ups that let them chat again. */
+/** The user's plan, what they have spent in it, and the top-ups that let them chat again. */
 export function UsagePanel({ userId }: { userId: string }) {
   const [usage, setUsage] = useState<UsageSpending | null>(null);
   const [amount, setAmount] = useState('10');
-  const [confirmNewYear, setConfirmNewYear] = useState(false);
+  const [confirmNewPeriod, setConfirmNewPeriod] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setUsage(null);
     setError(null);
-    setConfirmNewYear(false);
+    setConfirmNewPeriod(false);
     api.admin.usage(userId).then(setUsage).catch((err) => setError(err instanceof Error ? err.message : 'Could not load usage'));
   }, [userId]);
 
@@ -41,11 +41,11 @@ export function UsagePanel({ userId }: { userId: string }) {
     run(() => api.admin.addTopup(userId, value), 'Could not add the top-up');
   };
 
-  const startNewYear = () => {
-    // Two clicks: it drops this year's spending and top-ups from the count.
-    if (!confirmNewYear) { setConfirmNewYear(true); return; }
-    setConfirmNewYear(false);
-    run(() => api.admin.startNewPeriod(userId), 'Could not start a new year');
+  const startNewPeriod = () => {
+    // Two clicks: it drops this period's spending and top-ups from the count.
+    if (!confirmNewPeriod) { setConfirmNewPeriod(true); return; }
+    setConfirmNewPeriod(false);
+    run(() => api.admin.startNewPeriod(userId), 'Could not start a new period');
   };
 
   const percent = usage ? Math.min(Math.round((usage.spent / usage.limit) * 100), 100) : 0;
@@ -54,18 +54,33 @@ export function UsagePanel({ userId }: { userId: string }) {
     <div className="bg-surface border border-border rounded-2xl p-5">
       <h2 className="text-sm font-semibold text-text-primary mb-1">Usage</h2>
       <p className="text-xs text-text-dim mb-4 leading-relaxed">
-        Chat spending counted against the yearly limit set under General. When the user pays for more, add a
-        top-up; when they pay for a new year, start one here.
+        Chat spending counted against the limit set under General. When the user pays for more, add a top-up;
+        when they pay for a new period, start one here. A plan does not renew by itself.
       </p>
 
       {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
 
       {usage && (
         <div className="space-y-4">
+          <div className="flex items-center gap-2 text-xs text-text-muted">
+            <label htmlFor="plan-months">Plan</label>
+            <select
+              id="plan-months"
+              value={usage.plan_months}
+              disabled={busy}
+              onChange={(e) => run(() => api.admin.setPlan(userId, Number(e.target.value) as PlanMonths), 'Could not change the plan')}
+              className="bg-surface-2 border border-border rounded-xl px-3 py-1.5 text-sm text-text-primary outline-none focus:border-primary/50 transition-colors"
+            >
+              <option value={12}>12 months</option>
+              <option value={6}>6 months</option>
+            </select>
+            {usage.expired && <span className="ml-auto text-red-600 font-medium">Ended {day(usage.ends_at)}</span>}
+          </div>
+
           <div>
             <div className="flex items-baseline justify-between text-xs text-text-muted">
               <span>
-                {day(usage.period_start)} to {day(usage.resets_at)}
+                {day(usage.period_start)} to {day(usage.ends_at)}
               </span>
               <span className={cn(percent >= 100 && 'text-red-600 font-medium')}>
                 {usd(usage.spent)} of {usd(usage.limit)} · {percent}%
@@ -81,7 +96,7 @@ export function UsagePanel({ userId }: { userId: string }) {
 
           <div className="text-xs text-text-muted space-y-1">
             <div className="flex justify-between">
-              <span>Yearly limit</span>
+              <span>{usage.plan_months}-month limit</span>
               <span>{usd(usage.base_limit)}</span>
             </div>
             {usage.topups.map((t) => (
@@ -121,18 +136,18 @@ export function UsagePanel({ userId }: { userId: string }) {
               </Button>
             </form>
             <Button
-              onClick={startNewYear}
+              onClick={startNewPeriod}
               disabled={busy}
               variant="ghost"
               size="sm"
               className="ml-auto"
               title={
-                'For when the user pays for another year. Their year restarts today and runs for 12 months: spending and top-ups from before no longer count, so they get the full yearly limit again.\n\n' +
-                'Example: a user\'s year runs from 1 March. On 20 February they have $15 left and pay for another year. Click this, and their new year runs from 20 February to the next 20 February with the full limit. The $15 left over does not carry forward.'
+                `For when the user pays for another period. Their plan restarts today and runs for ${usage.plan_months} months: spending and top-ups from before no longer count, so they get the full limit again.\n\n` +
+                'Example: a user on a 12-month plan runs from 1 March. On 20 February they have $15 left and pay for another year. Click this, and their new period runs from 20 February to the next 20 February with the full limit. The $15 left over does not carry forward.'
               }
             >
               <CalendarPlus size={13} />
-              {confirmNewYear ? 'Click again to start a new year' : 'Start new year today'}
+              {confirmNewPeriod ? 'Click again to start a new period' : 'Start new period today'}
             </Button>
           </div>
         </div>

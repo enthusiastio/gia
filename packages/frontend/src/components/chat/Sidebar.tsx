@@ -13,9 +13,9 @@ import { Conversation, UsageStatus, User } from "@/lib/api";
 import { formatRelativeTime, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 
-/** "in 5h", "in 12 days": how long until the allowance renews. */
-function formatReset(resetsAt: string): string {
-  const minutes = Math.max(Math.ceil((new Date(resetsAt).getTime() - Date.now()) / 60000), 1);
+/** "in 5h", "in 12 days": how long until the plan ends. */
+function formatEnd(endsAt: string): string {
+  const minutes = Math.max(Math.ceil((new Date(endsAt).getTime() - Date.now()) / 60000), 1);
   if (minutes < 60) return `in ${minutes}m`;
   const hours = Math.ceil(minutes / 60);
   if (hours < 24) return `in ${hours}h`;
@@ -24,8 +24,8 @@ function formatReset(resetsAt: string): string {
 }
 
 /**
- * A labelled bar along the bottom of the sidebar, filled to the share of this
- * year's allowance spent. Clicking it slides up when the year renews.
+ * A labelled bar along the bottom of the sidebar, filled to the share of the
+ * plan's allowance spent. Clicking it slides up when the plan ends.
  */
 function UsageMeter({ usage }: { usage: UsageStatus }) {
   const [open, setOpen] = useState(false);
@@ -42,10 +42,12 @@ function UsageMeter({ usage }: { usage: UsageStatus }) {
             transition={{ duration: 0.2, ease: "easeOut" }}
             className="overflow-hidden"
           >
-            <p className={cn("px-6 pt-1 pb-1 text-[11px] text-text-muted", usage.exhausted && "text-red-600 font-medium")}>
-              {usage.exhausted
-                ? "This year's allowance is used up. Contact us to add more."
-                : `${percent}% of this year's allowance used. Renews ${formatReset(usage.resets_at)}.`}
+            <p className={cn("px-6 pt-1 pb-1 text-[11px] text-text-muted", (usage.expired || usage.exhausted) && "text-red-600 font-medium")}>
+              {usage.expired
+                ? "Your plan has ended. Contact us to renew it."
+                : usage.exhausted
+                  ? "Your plan's allowance is used up. Contact us to buy a top-up."
+                  : `${percent}% of your plan's allowance used. Plan ends ${formatEnd(usage.ends_at)}.`}
             </p>
           </motion.div>
         )}
@@ -58,7 +60,7 @@ function UsageMeter({ usage }: { usage: UsageStatus }) {
         className="block w-full px-6 pt-2 pb-3 group"
       >
         <div className="flex items-baseline justify-between text-[11px] text-text-muted group-hover:text-text-primary transition-colors">
-          <span>Usage this year</span>
+          <span>Usage</span>
           <span>{percent}%</span>
         </div>
         <div

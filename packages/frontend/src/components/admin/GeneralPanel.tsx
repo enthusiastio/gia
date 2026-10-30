@@ -98,7 +98,7 @@ export function GeneralPanel({ settings, onSaved }: GeneralPanelProps) {
               className="w-full sm:w-48 bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-dim outline-none focus:border-primary/50 transition-colors"
             />
             <p className="text-[11px] text-text-dim mt-1.5 leading-relaxed">
-              Each user's year runs from the day they were added, or from when you last started a new year on their page. Chat stops answering a user who spends their allowance until you add a top-up or the year renews. Users see how much is left as a percentage, never the amounts.
+              Users on a 6-month plan get half of this. Each user's plan runs from the day they were added, or from when you last started a new period on their page, and does not renew by itself. Chat stops answering a user who spends their allowance until you add a top-up, and a user whose plan has ended until you start a new period. Users see how much is left as a percentage, never the amounts.
             </p>
           </div>
 

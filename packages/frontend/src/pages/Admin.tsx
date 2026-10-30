@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, MessagesSquare, Plus, Save, SlidersHorizontal, Trash2, Users } from 'lucide-react';
-import { api, AdminUser, GeneralSettings, Language } from '@/lib/api';
+import { api, AdminUser, GeneralSettings, Language, PlanMonths } from '@/lib/api';
 import { DocumentPanel } from '@/components/admin/DocumentPanel';
 import { GeneralPanel } from '@/components/admin/GeneralPanel';
 import { ModelSelect } from '@/components/admin/ModelSelect';
@@ -27,6 +27,7 @@ export default function Admin() {
   const [adding, setAdding] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
+  const [newPlan, setNewPlan] = useState<PlanMonths>(12);
   const [addError, setAddError] = useState<string | null>(null);
   const [addBusy, setAddBusy] = useState(false);
 
@@ -81,11 +82,12 @@ export default function Admin() {
     setAddBusy(true);
     setAddError(null);
     try {
-      const created = await api.admin.createUser(newEmail.trim(), newName.trim() || undefined);
+      const created = await api.admin.createUser(newEmail.trim(), newName.trim() || undefined, newPlan);
       setUsers(await api.admin.users());
       setAdding(false);
       setNewEmail('');
       setNewName('');
+      setNewPlan(12);
       await selectUser(created);
     } catch (err) {
       setAddError(err instanceof Error ? err.message : 'Could not add the user');
@@ -217,6 +219,15 @@ export default function Admin() {
                   placeholder="Name (optional)"
                   className="w-full bg-surface-2 border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-primary placeholder-text-dim outline-none focus:border-primary/50"
                 />
+                <select
+                  value={newPlan}
+                  onChange={(e) => setNewPlan(Number(e.target.value) as PlanMonths)}
+                  aria-label="Plan"
+                  className="w-full bg-surface-2 border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-primary/50"
+                >
+                  <option value={12}>12-month plan</option>
+                  <option value={6}>6-month plan</option>
+                </select>
                 {addError && <p className="text-xs text-red-600">{addError}</p>}
                 <p className="text-[11px] text-text-dim leading-relaxed">
                   They can sign in once added. Documents you upload now will be waiting for them.
